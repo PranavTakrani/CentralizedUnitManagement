@@ -1,0 +1,11 @@
+# docker-compose.yml
+version: "4.57"
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: cum_admin
+      POSTGRES_PASSWORD: cum_pass
+      POSTGRES_DB: cum_db
+    ports:
+      - "5432:5432"
