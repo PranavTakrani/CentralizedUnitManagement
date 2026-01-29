@@ -1,2 +1,44 @@
+# -------------------
+# Python / venv
+# -------------------
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.egg
+
+# -------------------
+# Environment variables
+# -------------------
 .env
-docker-compose.yml
+
+# -------------------
+# Logs
+# -------------------
+*.log
+
+# -------------------
+# SQLite / local DB (if used)
+# -------------------
+*.sqlite3
+
+# -------------------
+# IDE / Editor
+# -------------------
+.vscode/
+.idea/
+
+# -------------------
+# Docker
+# -------------------
+docker-compose.override.yml
+*.env.override
+
+# -------------------
+# OS files
+# -------------------
+.DS_Store
+Thumbs.db
