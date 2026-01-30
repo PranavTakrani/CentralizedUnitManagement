@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey
+from sqlalchemy import Boolean, Column, String, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from database import Base
@@ -30,3 +30,13 @@ class Assignment(Base):
     url = Column(String)
     last_synced = Column(DateTime(timezone=True), server_default=func.now())
     status = Column(String, default="open")
+
+class UserAssignment(Base):
+    __tablename__ = "user_assignments"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    assignment_id = Column(UUID(as_uuid=True), ForeignKey("assignments.id"), primary_key=True)
+
+    checked_off = Column(Boolean, default=False)
+    checked_off_at = Column(DateTime(timezone=True))
+    ## submission_status = Column(String)  # optional
