@@ -1,1 +1,5 @@
 .env
+.md
+__pycache__/
+node_modules/
+.venv/
