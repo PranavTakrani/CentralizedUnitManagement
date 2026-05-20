@@ -5,6 +5,9 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 import os
 import datetime
+import pytz
+
+TZ = pytz.timezone("America/Los_Angeles")
 
 router = APIRouter()
 
@@ -35,15 +38,17 @@ def get_upcoming():
 def get_events(days=1):
     creds = get_credentials()
     service = build("calendar", "v3", credentials=creds)
-    now = datetime.datetime.utcnow().isoformat() + "Z"
-    end = (datetime.datetime.utcnow() + datetime.timedelta(days=days)).isoformat() + "Z"
+    local_now = datetime.datetime.now(TZ)
+    local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    time_min = local_midnight.astimezone(pytz.utc).isoformat()
+    time_max = (local_midnight + datetime.timedelta(days=days)).astimezone(pytz.utc).isoformat()
 
     events = []
     for calendar_id in CALENDAR_IDS:
         result = service.events().list(
             calendarId=calendar_id,
-            timeMin=now,
-            timeMax=end,
+            timeMin=time_min,
+            timeMax=time_max,
             singleEvents=True,
             orderBy="startTime"
         ).execute()
