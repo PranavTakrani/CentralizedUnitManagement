@@ -1,20 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import api from '../lib/api'
 
 export default function Spotify() {
   const [data, setData] = useState(null)
 
-  const fetch = () => api.get('/spotify/now-playing').then(r => setData(r.data)).catch(() => {})
+  const fetchNow = useCallback(() => {
+    api.get('/spotify/now-playing').then(r => setData(r.data)).catch(() => {})
+  }, [])
 
   useEffect(() => {
-    fetch()
-    const id = setInterval(fetch, 3000)
+    fetchNow()
+    const id = setInterval(fetchNow, 3000)
     return () => clearInterval(id)
-  }, [])
+  }, [fetchNow])
 
   const ctrl = (endpoint) => {
     if (endpoint === '/spotify/play') setData(d => d ? { ...d, is_playing: !d.is_playing } : d)
-    api.post(endpoint).then(() => setTimeout(fetch, 500))
+    api.post(endpoint).then(() => setTimeout(fetchNow, 500))
   }
 
   const pct = data?.duration_ms ? Math.max(0, Math.min(100, (data.progress_ms / data.duration_ms) * 100)) : 0
