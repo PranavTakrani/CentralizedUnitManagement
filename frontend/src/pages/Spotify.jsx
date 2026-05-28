@@ -61,11 +61,6 @@ export default function Spotify() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [data])
 
-  const ctrl = (endpoint) => {
-    if (endpoint === '/spotify/play') setData(d => d ? { ...d, is_playing: !d.is_playing } : d)
-    api.post(endpoint).then(() => setTimeout(fetchNow, 500))
-  }
-
   const pct = data?.duration_ms ? Math.max(0, Math.min(100, (data.progress_ms / data.duration_ms) * 100)) : 0
   const fmtMs = (ms) => {
     const s = Math.floor(Math.max(0, ms) / 1000)
