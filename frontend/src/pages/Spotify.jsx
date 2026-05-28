@@ -24,7 +24,7 @@ export default function Spotify() {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 24, alignItems: 'center', height: '100%' }}>
+    <div style={{ display: 'flex', gap: 24, alignItems: 'center', height: '100%', paddingBottom: 40 }}>
       {data?.album_art && (
         <img src={data.album_art} alt="album" style={{ width: 200, height: 200, borderRadius: 8, objectFit: 'cover', border: '2px solid var(--border)', flexShrink: 0 }} />
       )}
