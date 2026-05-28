@@ -41,7 +41,8 @@ def now_playing():
         "album": playback["item"]["album"]["name"],
         "album_art": playback["item"]["album"]["images"][0]["url"],
         "progress_ms": playback["progress_ms"],
-        "duration_ms": playback["item"]["duration_ms"]
+        "duration_ms": playback["item"]["duration_ms"],
+        "volume_percent": playback.get("device", {}).get("volume_percent", 50)
     }
 
 @router.post("/play")

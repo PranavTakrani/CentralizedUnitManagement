@@ -1,8 +1,10 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import api from '../lib/api'
 
 export default function Spotify() {
   const [data, setData] = useState(null)
+  const clickCount = useRef(0)
+  const clickTimer = useRef(null)
 
   const fetchNow = useCallback(() => {
     api.get('/spotify/now-playing').then(r => setData(r.data)).catch(() => {})
@@ -13,6 +15,51 @@ export default function Spotify() {
     const id = setInterval(fetchNow, 3000)
     return () => clearInterval(id)
   }, [fetchNow])
+
+  const ctrl = (endpoint) => {
+    if (endpoint === '/spotify/play') setData(d => d ? { ...d, is_playing: !d.is_playing } : d)
+    api.post(endpoint).then(() => setTimeout(fetchNow, 500))
+  }
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      switch (e.key) {
+        case 'MediaPlayPause':
+          // middle button — count clicks, resolve after 300ms
+          e.preventDefault()
+          clickCount.current += 1
+          clearTimeout(clickTimer.current)
+          clickTimer.current = setTimeout(() => {
+            const n = clickCount.current
+            clickCount.current = 0
+            if (n === 1) ctrl('/spotify/play')
+            else if (n === 2) ctrl('/spotify/next')
+            else if (n >= 3) ctrl('/spotify/previous')
+          }, 300)
+          break
+        case 'MediaTrackNext':
+          e.preventDefault()
+          ctrl('/spotify/next')
+          break
+        case 'MediaTrackPrevious':
+          e.preventDefault()
+          ctrl('/spotify/previous')
+          break
+        case 'AudioVolumeUp':
+        case 'VolumeUp':
+          e.preventDefault()
+          api.post('/spotify/volume', null, { params: { volume: Math.min(100, (data?.volume_percent ?? 50) + 10) } }).then(fetchNow)
+          break
+        case 'AudioVolumeDown':
+        case 'VolumeDown':
+          e.preventDefault()
+          api.post('/spotify/volume', null, { params: { volume: Math.max(0, (data?.volume_percent ?? 50) - 10) } }).then(fetchNow)
+          break
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [data])
 
   const ctrl = (endpoint) => {
     if (endpoint === '/spotify/play') setData(d => d ? { ...d, is_playing: !d.is_playing } : d)
