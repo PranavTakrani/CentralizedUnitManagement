@@ -14,12 +14,12 @@ export default function Spotify() {
 
   const ctrl = (endpoint) => {
     if (endpoint === '/spotify/play') setData(d => d ? { ...d, is_playing: !d.is_playing } : d)
-    api.post(endpoint).then(fetch)
+    api.post(endpoint).then(() => setTimeout(fetch, 500))
   }
 
-  const pct = data?.duration_ms ? (data.progress_ms / data.duration_ms) * 100 : 0
+  const pct = data?.duration_ms ? Math.max(0, Math.min(100, (data.progress_ms / data.duration_ms) * 100)) : 0
   const fmtMs = (ms) => {
-    const s = Math.floor(ms / 1000)
+    const s = Math.floor(Math.max(0, ms) / 1000)
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
   }
 
