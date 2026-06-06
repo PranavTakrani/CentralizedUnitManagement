@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const todayRange = () => {
-  const start = new Date(); start.setHours(0,0,0,0)
-  const end = new Date(); end.setHours(23,59,59,999)
-  return [start.toISOString(), end.toISOString()]
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+  const toLocal = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 23)
+  return [toLocal(start), toLocal(end)]
 }
 
 const emptyForm = { meals: '', protein_g: '', carbs_g: '', fat_g: '', servings: '1' }
@@ -47,6 +49,8 @@ export default function Calories() {
   const [log, setLog] = useState([])
   const [goals, setGoals] = useState(null)
   const [form, setForm] = useState(emptyForm)
+  const [suggestions, setSuggestions] = useState([])
+  const [showSug, setShowSug] = useState(false)
 
   const load = async () => {
     const [start, end] = todayRange()
@@ -59,6 +63,19 @@ export default function Calories() {
   }
 
   useEffect(() => { load() }, [])
+
+  const searchMeals = async (q) => {
+    if (!q.trim()) { setSuggestions([]); return }
+    const { data } = await supabase.from('meals').select('meals, protein_g, carbs_g, fat_g, serving_size').ilike('meals', `%${q}%`).order('logged_at', { ascending: false }).limit(8)
+    const seen = new Set()
+    setSuggestions((data ?? []).filter(r => { if (seen.has(r.meals)) return false; seen.add(r.meals); return true }))
+  }
+
+  const pickSuggestion = (r) => {
+    const srv = parseFloat(r.serving_size) || 1
+    setForm({ meals: r.meals, protein_g: String(Math.round(r.protein_g / srv)), carbs_g: String(Math.round(r.carbs_g / srv)), fat_g: String(Math.round(r.fat_g / srv)), servings: '1' })
+    setSuggestions([]); setShowSug(false)
+  }
 
   const s = Number(form.servings) || 1
   const calcCals = Math.round(((Number(form.protein_g) || 0) * 4 + (Number(form.carbs_g) || 0) * 4 + (Number(form.fat_g) || 0) * 9) * s)
@@ -108,8 +125,28 @@ export default function Calories() {
       </div>
 
       {/* Add form */}
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        {inp('meals', 'Food name...', 150)}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative' }}>
+          <input
+            value={form.meals}
+            onChange={e => { setForm(f => ({ ...f, meals: e.target.value })); searchMeals(e.target.value); setShowSug(true) }}
+            onBlur={() => setTimeout(() => setShowSug(false), 150)}
+            onFocus={() => form.meals && setShowSug(true)}
+            placeholder="Food name..."
+            type="text"
+            style={{ width: 150, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 8px', color: 'var(--text)', fontSize: 13 }}
+          />
+          {showSug && suggestions.length > 0 && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 99, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, minWidth: 220, boxShadow: '0 4px 12px #0008' }}>
+              {suggestions.map((r, i) => (
+                <div key={i} onMouseDown={() => pickSuggestion(r)} style={{ padding: '8px 10px', cursor: 'pointer', fontSize: 12, borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontWeight: 600 }}>{r.meals}</span>
+                  <span style={{ color: 'var(--text-dim)', marginLeft: 8 }}>{r.protein_g}p {r.carbs_g}c {r.fat_g}f</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         {inp('protein_g', 'Pro')}
         {inp('carbs_g', 'Carb')}
         {inp('fat_g', 'Fat')}

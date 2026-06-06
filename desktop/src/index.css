@@ -8,13 +8,12 @@
   --red-bright: #ff2222;
   --text: #f0f0f0;
   --text-dim: #888;
-  --nav-h: 48px;
 }
 
 html, body, #root {
   width: 100%;
-  min-height: 100dvh;
-  overflow-x: hidden;
+  height: 100vh;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: 'Segoe UI', system-ui, sans-serif;
@@ -28,16 +27,28 @@ button {
   background: var(--surface);
   color: var(--text);
   border-radius: 6px;
-  padding: 10px 18px;
-  font-size: 14px;
-  touch-action: manipulation;
+  padding: 8px 16px;
+  font-size: 13px;
   transition: background 0.15s;
 }
+button:hover { filter: brightness(1.2); }
 button:active { background: var(--red); }
+
+input, select {
+  outline: none;
+  font-family: inherit;
+}
+input:focus, select:focus {
+  border-color: var(--red) !important;
+}
 
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px 12px;
 }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }

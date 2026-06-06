@@ -1,0 +1,37 @@
+{
+  "name": "cum-desktop",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5174 && electron .\"",
+    "build": "vite build && electron-builder",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "vite": "^6.0.0",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.cum.desktop",
+    "productName": "CUM",
+    "files": ["dist/**/*", "electron/**/*"],
+    "win": {
+      "target": "nsis",
+      "icon": "electron/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    }
+  }
+}
