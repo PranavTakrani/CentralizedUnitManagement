@@ -6,3 +6,4 @@ node_modules/
 .venv/
 token.json
 credentials.json
+dist/
