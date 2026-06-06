@@ -23,7 +23,7 @@ function createWindow() {
   if (isDev) {
     win.loadURL('http://localhost:5174')
   } else {
-    win.loadFile(path.join(__dirname, '../dist/index.html'))
+    win.loadFile(path.join(__dirname, '../build/index.html'))
   }
 
   win.on('blur', () => {
