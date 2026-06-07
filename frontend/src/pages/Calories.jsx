@@ -5,8 +5,7 @@ const todayRange = () => {
   const now = new Date()
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-  const toLocal = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 23)
-  return [toLocal(start), toLocal(end)]
+  return [start.toISOString(), end.toISOString()]
 }
 
 const emptyForm = { meals: '', protein_g: '', carbs_g: '', fat_g: '', servings: '1' }
