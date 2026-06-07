@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-const todayRange = () => {
-  const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-  return [start.toISOString(), end.toISOString()]
-}
+import { todayRange } from '../lib/todayRange'
 
 const emptyForm = { meals: '', protein_g: '', carbs_g: '', fat_g: '', servings: '1' }
 

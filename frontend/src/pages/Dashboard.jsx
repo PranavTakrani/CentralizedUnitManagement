@@ -20,13 +20,7 @@ function CircleProgress({ val, goal }) {
   )
 }
 
-const todayRange = () => {
-  const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-  const toLocal = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 23)
-  return [toLocal(start), toLocal(end)]
-}
+import { todayRange } from '../lib/todayRange'
 
 const priorityColor = (p) => p >= 2 ? '#ff2222' : p === 1 ? '#ff8800' : 'var(--text-dim)'
 
