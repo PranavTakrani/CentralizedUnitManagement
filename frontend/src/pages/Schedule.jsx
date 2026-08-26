@@ -36,7 +36,10 @@ export default function Schedule() {
 
   useEffect(() => {
     if (!loading && scrollRef.current) {
-      scrollRef.current.scrollTop = Math.max(0, nowTop - SLOT_H * 2)
+      const el = scrollRef.current
+      requestAnimationFrame(() => {
+        el.scrollTop = Math.max(0, nowTop - SLOT_H * 2)
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading])
