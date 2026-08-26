@@ -13,10 +13,21 @@ TZ = pytz.timezone("America/Los_Angeles")
 router = APIRouter()
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
-CALENDAR_IDS = ["pranav.takrani@gmail.com", "ptakrani@andrew.cmu.edu", "pranav@northstarrobotics.ai"]
 
 PROVIDER = "google_calendar"
 TOKEN_URI = "https://oauth2.googleapis.com/token"
+
+
+def get_calendar_ids():
+    """Calendar IDs to pull events from, managed by the user via the frontend
+    (stored in the 'calendars' Supabase table rather than hardcoded)."""
+    result = (
+        token_store.get_client()
+        .table("calendars")
+        .select("calendar_id")
+        .execute()
+    )
+    return [row["calendar_id"] for row in (result.data or [])]
 
 
 def get_credentials():
@@ -90,8 +101,8 @@ def get_credentials():
 def get_today():
     return get_events(days=1)
 @router.get("/upcoming")
-def get_upcoming():
-    return get_events(days=3)
+def get_upcoming(days: int = 7):
+    return get_events(days=days)
 
 def get_events(days=1):
     creds = get_credentials()
@@ -101,15 +112,25 @@ def get_events(days=1):
     time_min = local_midnight.astimezone(pytz.utc).isoformat()
     time_max = (local_midnight + datetime.timedelta(days=days)).astimezone(pytz.utc).isoformat()
 
+    try:
+        calendar_ids = get_calendar_ids()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not read calendar list: {e}")
+
     events = []
-    for calendar_id in CALENDAR_IDS:
-        result = service.events().list(
-            calendarId=calendar_id,
-            timeMin=time_min,
-            timeMax=time_max,
-            singleEvents=True,
-            orderBy="startTime"
-        ).execute()
+    for calendar_id in calendar_ids:
+        try:
+            result = service.events().list(
+                calendarId=calendar_id,
+                timeMin=time_min,
+                timeMax=time_max,
+                singleEvents=True,
+                orderBy="startTime"
+            ).execute()
+        except Exception:
+            # A bad/inaccessible calendar_id (typo, revoked access) shouldn't
+            # take down every other calendar's events.
+            continue
         events.extend(result.get("items", []))
 
     return [
