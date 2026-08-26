@@ -7,6 +7,7 @@ const links = [
   { to: '/schedule', label: 'Schedule' },
   { to: '/calories', label: 'Calories' },
   { to: '/spotify', label: 'Spotify' },
+  { to: '/blow', label: 'BLOW' },
 ]
 
 export default function NavBar() {

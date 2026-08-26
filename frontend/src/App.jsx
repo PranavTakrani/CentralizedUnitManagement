@@ -8,6 +8,7 @@ import Assignments from './pages/Assignments'
 import Schedule from './pages/Schedule'
 import Calories from './pages/Calories'
 import Spotify from './pages/Spotify'
+import Blow from './pages/Blow'
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
               <Route path="schedule" element={<Schedule />} />
               <Route path="calories" element={<Calories />} />
               <Route path="spotify" element={<Spotify />} />
+              <Route path="blow" element={<Blow />} />
             </Route>
           </Route>
         </Routes>
