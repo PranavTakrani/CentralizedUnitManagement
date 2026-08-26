@@ -8,3 +8,5 @@ token.json
 credentials.json
 dist/
 build/
+.vercel
+.env*

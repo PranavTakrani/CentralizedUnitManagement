@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 
 const links = [
   { to: '/', label: 'Dashboard' },
@@ -38,6 +39,15 @@ export default function NavBar() {
           {label}
         </NavLink>
       ))}
+      <button
+        onClick={() => supabase.auth.signOut()}
+        style={{
+          marginLeft: 'auto', background: 'transparent', border: '1px solid var(--border)',
+          borderRadius: 6, padding: '6px 12px', color: 'var(--text-dim)', fontSize: 12, cursor: 'pointer',
+        }}
+      >
+        Log out
+      </button>
     </nav>
   )
 }
