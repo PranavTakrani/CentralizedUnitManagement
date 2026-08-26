@@ -68,40 +68,46 @@ export default function Spotify() {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 24, alignItems: 'center', height: '100%', paddingBottom: 70 }}>
-      {data?.album_art && (
-        <img src={data.album_art} alt="album" style={{ width: 200, height: 200, borderRadius: 8, objectFit: 'cover', border: '2px solid var(--border)', flexShrink: 0 }} />
-      )}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {data?.track ? (
-          <>
-            <div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>{data.track}</div>
-              <div style={{ color: 'var(--text-dim)', fontSize: 14 }}>{data.artist}</div>
-              <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>{data.album}</div>
-            </div>
-
-            <div>
-              <div style={{ background: 'var(--border)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', background: 'var(--red)', transition: 'width 1s linear' }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
-                <span>{fmtMs(data.progress_ms)}</span>
-                <span>{fmtMs(data.duration_ms)}</span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => ctrl('/spotify/previous')} style={{ flex: 1, fontSize: 20, padding: '12px 0' }}>⏮</button>
-              <button onClick={() => ctrl('/spotify/play')} style={{ flex: 2, fontSize: 20, padding: '12px 0', background: 'var(--red)', color: '#fff' }}>
-                {data.is_playing ? '⏸' : '▶'}
-              </button>
-              <button onClick={() => ctrl('/spotify/next')} style={{ flex: 1, fontSize: 20, padding: '12px 0' }}>⏭</button>
-            </div>
-          </>
-        ) : (
-          <div style={{ color: 'var(--text-dim)' }}>Nothing playing</div>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="card" style={{
+        display: 'flex', gap: 'clamp(16px, 3vw, 36px)', alignItems: 'center',
+        flexWrap: 'wrap', justifyContent: 'center',
+        width: '100%', maxWidth: 860,
+      }}>
+        {data?.album_art && (
+          <img src={data.album_art} alt="album" style={{ width: 'clamp(180px, 26vw, 280px)', aspectRatio: '1 / 1', borderRadius: 10, objectFit: 'cover', border: '2px solid var(--border)', flexShrink: 0 }} />
         )}
+        <div style={{ flex: '1 1 300px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {data?.track ? (
+            <>
+              <div>
+                <div style={{ fontSize: 'clamp(1.2rem, 2.6vw, 1.75rem)', fontWeight: 700, lineHeight: 1.25 }}>{data.track}</div>
+                <div style={{ color: 'var(--text-dim)', fontSize: '1rem' }}>{data.artist}</div>
+                <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem' }}>{data.album}</div>
+              </div>
+
+              <div>
+                <div style={{ background: 'var(--border)', borderRadius: 5, height: 8, overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: 'var(--red)', transition: 'width 1s linear' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-dim)', marginTop: 6 }}>
+                  <span>{fmtMs(data.progress_ms)}</span>
+                  <span>{fmtMs(data.duration_ms)}</span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={() => ctrl('/spotify/previous')} style={{ flex: 1, fontSize: '1.5rem', padding: '14px 0' }}>⏮</button>
+                <button onClick={() => ctrl('/spotify/play')} style={{ flex: 2, fontSize: '1.5rem', padding: '14px 0', background: 'var(--red)', color: '#fff' }}>
+                  {data.is_playing ? '⏸' : '▶'}
+                </button>
+                <button onClick={() => ctrl('/spotify/next')} style={{ flex: 1, fontSize: '1.5rem', padding: '14px 0' }}>⏭</button>
+              </div>
+            </>
+          ) : (
+            <div style={{ color: 'var(--text-dim)', textAlign: 'center' }}>Nothing playing</div>
+          )}
+        </div>
       </div>
     </div>
   )

@@ -3,19 +3,20 @@ import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import { supabase } from '../lib/supabase'
 
-const RADIUS = 40
+const RADIUS = 62
 const CIRC = 2 * Math.PI * RADIUS
-const SLOT = 20
+const SLOT = 34
+const HOUR_COL = 40
 
 function CircleProgress({ val, goal }) {
   const pct = goal ? Math.min(val / goal, 1) : 0
   return (
-    <svg width={100} height={100}>
-      <circle cx={50} cy={50} r={RADIUS} fill="none" stroke="var(--border)" strokeWidth={8} />
-      <circle cx={50} cy={50} r={RADIUS} fill="none" stroke="var(--red)" strokeWidth={8}
-        strokeDasharray={`${pct * CIRC} ${CIRC}`} strokeLinecap="round" transform="rotate(-90 50 50)" />
-      <text x={50} y={46} textAnchor="middle" fill="var(--text)" fontSize={14} fontWeight={700}>{val}</text>
-      <text x={50} y={60} textAnchor="middle" fill="var(--text-dim)" fontSize={10}>/ {goal} cal</text>
+    <svg viewBox="0 0 150 150" style={{ width: '100%', maxWidth: 200, height: 'auto' }}>
+      <circle cx={75} cy={75} r={RADIUS} fill="none" stroke="var(--border)" strokeWidth={12} />
+      <circle cx={75} cy={75} r={RADIUS} fill="none" stroke="var(--red)" strokeWidth={12}
+        strokeDasharray={`${pct * CIRC} ${CIRC}`} strokeLinecap="round" transform="rotate(-90 75 75)" />
+      <text x={75} y={72} textAnchor="middle" fill="var(--text)" fontSize={28} fontWeight={700}>{val}</text>
+      <text x={75} y={94} textAnchor="middle" fill="var(--text-dim)" fontSize={14}>/ {goal} cal</text>
     </svg>
   )
 }
@@ -27,7 +28,6 @@ const priorityColor = (p) => p >= 2 ? '#ff2222' : p === 1 ? '#ff8800' : 'var(--t
 export default function Dashboard() {
   const [events, setEvents] = useState([])
   const [tasks, setTasks] = useState([])
-  const [stats, setStats] = useState(null)
   const [cals, setCals] = useState(0)
   const [goals, setGoals] = useState(null)
   const [now, setNow] = useState(new Date())
@@ -50,7 +50,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadCalendar(); loadSupabase()
-    const tick = () => { api.get('/system/').then(r => setStats(r.data)).catch(() => {}); setNow(new Date()) }
+    const tick = () => setNow(new Date())
     const fetchSpotify = () => api.get('/spotify/now-playing').then(r => setSpotify(r.data)).catch(() => {})
     tick(); fetchSpotify()
     const ids = [setInterval(tick, 5000), setInterval(fetchSpotify, 5000), setInterval(() => { loadCalendar(); loadSupabase() }, 60000)]
@@ -65,23 +65,29 @@ export default function Dashboard() {
   const endH = Math.min(23, now.getHours() + 10)
   const hours = Array.from({ length: endH - startH + 1 }, (_, i) => startH + i)
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60 - startH) * SLOT
+  const goal = goals?.daily_calories ?? 0
+  const remaining = Math.max(goal - cals, 0)
 
   return (
-    <div style={{ display: 'flex', height: '100%', gap: 10, position: 'relative' }}>
+    <div className="dash-grid">
 
       {/* Left: calendar */}
-      <div onClick={() => navigate('/schedule')} style={{ width: 200, display: 'flex', flexDirection: 'column', gap: 4, cursor: 'pointer' }}>
-        <div style={{ color: 'var(--red)', fontWeight: 600, fontSize: 12, flexShrink: 0 }}>TODAY</div>
-        <div ref={calRef} style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+      <div
+        onClick={() => navigate('/schedule')}
+        className="card dash-cal"
+        style={{ display: 'flex', flexDirection: 'column', gap: 8, cursor: 'pointer', minHeight: 0 }}
+      >
+        <div className="panel-title">Today ›</div>
+        <div ref={calRef} style={{ flex: 1, overflowY: 'auto', position: 'relative', minHeight: 0 }}>
           {hours.map(h => (
             <div key={h} style={{ display: 'flex', height: SLOT, borderTop: '1px solid var(--border)' }}>
-              <span style={{ width: 26, fontSize: 10, color: 'var(--text-dim)', paddingTop: 2, textAlign: 'right', paddingRight: 4, flexShrink: 0 }}>
+              <span style={{ width: HOUR_COL, fontSize: '0.75rem', color: 'var(--text-dim)', paddingTop: 2, textAlign: 'right', paddingRight: 8, flexShrink: 0 }}>
                 {h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h-12}p`}
               </span>
               <div style={{ flex: 1, borderLeft: '1px solid var(--border)' }} />
             </div>
           ))}
-          <div style={{ position: 'absolute', left: 26, right: 0, top: nowTop, height: 2, background: 'var(--red)', boxShadow: '0 0 4px var(--red)', zIndex: 2 }} />
+          <div style={{ position: 'absolute', left: HOUR_COL, right: 0, top: nowTop, height: 2, background: 'var(--red)', boxShadow: '0 0 6px var(--red)', zIndex: 2 }} />
           {events.filter(e => e.start).map((e, i) => {
             const d = new Date(e.start)
             const startM = d.getHours() * 60 + d.getMinutes()
@@ -90,8 +96,8 @@ export default function Dashboard() {
             const top = (startM / 60 - startH) * SLOT
             if (top < 0 || top > hours.length * SLOT) return null
             return (
-              <div key={i} style={{ position: 'absolute', left: 30, right: 2, top: top + 1, height: Math.max((dur / 60) * SLOT - 2, 12), background: 'var(--red)', borderRadius: 3, padding: '1px 4px', overflow: 'hidden', zIndex: 1 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title}</div>
+              <div key={i} style={{ position: 'absolute', left: HOUR_COL + 4, right: 2, top: top + 1, height: Math.max((dur / 60) * SLOT - 2, 20), background: 'var(--red)', borderRadius: 5, padding: '2px 7px', overflow: 'hidden', zIndex: 1 }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title}</div>
               </div>
             )
           })}
@@ -99,59 +105,60 @@ export default function Dashboard() {
       </div>
 
       {/* Middle: tasks + music */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
-        <div onClick={() => navigate('/assignments')} className="card" style={{ maxHeight: 330, display: 'flex', flexDirection: 'column', gap: 4, cursor: 'pointer', overflow: 'hidden' }}>
-          <div style={{ color: 'var(--red)', fontWeight: 600, fontSize: 12, flexShrink: 0 }}>TASKS ›</div>
-          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div className="dash-col">
+        <div
+          onClick={() => navigate('/assignments')}
+          className="card dash-tasks"
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, cursor: 'pointer', overflow: 'hidden', minHeight: 0 }}
+        >
+          <div className="panel-title">Tasks ›</div>
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {tasks.length === 0
-              ? <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>No tasks</div>
+              ? <div style={{ color: 'var(--text-dim)' }}>No tasks</div>
               : tasks.map(t => (
-                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexShrink: 0, borderBottom: '1px solid var(--border)', paddingBottom: 4 }}>
-                  <span style={{ fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.task_name}</span>
-                  <span style={{ fontSize: 10, color: priorityColor(t.priority), fontWeight: 600 }}>{['LOW','MED','HI'][t.priority]}</span>
-                  {t.due_date && <span style={{ fontSize: 10, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{new Date(t.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>}
+                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexShrink: 0, borderBottom: '1px solid var(--border)', padding: '10px 0' }}>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.task_name}</span>
+                  <span style={{ fontSize: '0.75rem', color: priorityColor(t.priority), fontWeight: 700, letterSpacing: '0.05em' }}>{['LOW','MED','HI'][t.priority]}</span>
+                  {t.due_date && <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{new Date(t.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>}
                 </div>
               ))
             }
           </div>
         </div>
-        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px', flexShrink: 0, minHeight: 54 }}>
-          {spotify?.album_art && <img src={spotify.album_art} alt="" style={{ width: 36, height: 36, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} />}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spotify?.track ?? 'Not playing'}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spotify?.artist ?? '—'}</div>
+
+        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0, flexWrap: 'wrap' }}>
+          {spotify?.album_art && <img src={spotify.album_art} alt="" style={{ width: 56, height: 56, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />}
+          <div style={{ flex: 1, minWidth: 120 }}>
+            <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spotify?.track ?? 'Not playing'}</div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spotify?.artist ?? '—'}</div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginRight: 4 }}>
-            <svg onClick={() => api.post('/spotify/previous').catch(() => {})} width="20" height="20" viewBox="0 0 24 24" fill="var(--text-dim)" style={{ cursor: 'pointer' }}><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
-            <svg onClick={() => { api.post('/spotify/play').catch(() => {}); setSpotify(d => d ? { ...d, is_playing: !d.is_playing } : d) }} width="20" height="20" viewBox="0 0 24 24" fill={spotify?.is_playing ? 'var(--red)' : 'var(--text-dim)'} style={{ cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <svg onClick={() => api.post('/spotify/previous').catch(() => {})} width="28" height="28" viewBox="0 0 24 24" fill="var(--text-dim)" style={{ cursor: 'pointer' }}><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+            <svg onClick={() => { api.post('/spotify/play').catch(() => {}); setSpotify(d => d ? { ...d, is_playing: !d.is_playing } : d) }} width="34" height="34" viewBox="0 0 24 24" fill={spotify?.is_playing ? 'var(--red)' : 'var(--text-dim)'} style={{ cursor: 'pointer' }}>
               {spotify?.is_playing
                 ? <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
                 : <path d="M8 5v14l11-7z"/>}
             </svg>
-            <svg onClick={() => api.post('/spotify/next').catch(() => {})} width="20" height="20" viewBox="0 0 24 24" fill="var(--text-dim)" style={{ cursor: 'pointer' }}><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+            <svg onClick={() => api.post('/spotify/next').catch(() => {})} width="28" height="28" viewBox="0 0 24 24" fill="var(--text-dim)" style={{ cursor: 'pointer' }}><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
           </div>
         </div>
       </div>
 
-      {/* Right: calories + system */}
-      <div style={{ width: 180, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div onClick={() => navigate('/calories')} className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-          <div style={{ color: 'var(--red)', fontWeight: 600, fontSize: 12, alignSelf: 'flex-start' }}>CALORIES</div>
-          <CircleProgress val={cals} goal={goals?.daily_calories ?? 0} />
-        </div>
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ color: 'var(--red)', fontWeight: 600, fontSize: 12 }}>SYSTEM</div>
-          {stats ? (
-            <>
-              {[['CPU', `${stats.cpu_percent.toFixed(0)}%`], ['RAM', `${stats.ram_percent.toFixed(0)}%`], ['TEMP', stats.temp ? `${stats.temp}°C` : '—']].map(([l, v]) => (
-                <div key={l} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                  <span style={{ color: 'var(--text-dim)' }}>{l}</span>
-                  <span style={{ color: 'var(--red-bright)', fontWeight: 600 }}>{v}</span>
-                </div>
-              ))}
-              <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{(stats.ram_used/1073741824).toFixed(1)}G / {(stats.ram_total/1073741824).toFixed(1)}G</div>
-            </>
-          ) : <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>Loading...</div>}
+      {/* Right: calories */}
+      <div className="dash-col">
+        <div
+          onClick={() => navigate('/calories')}
+          className="card"
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, cursor: 'pointer', minHeight: 0 }}
+        >
+          <div className="panel-title">Calories ›</div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+            <CircleProgress val={cals} goal={goal} />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ color: 'var(--red-bright)', fontWeight: 700, fontSize: '1.15rem' }}>{remaining}</div>
+              <div style={{ color: 'var(--text-dim)', fontSize: '0.8rem', letterSpacing: '0.06em' }}>REMAINING</div>
+            </div>
+          </div>
         </div>
       </div>
 

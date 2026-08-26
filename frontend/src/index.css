@@ -8,36 +8,103 @@
   --red-bright: #ff2222;
   --text: #f0f0f0;
   --text-dim: #888;
-  --nav-h: 48px;
+  --nav-h: 60px;
+  /* Max readable width for the app shell on wide desktop screens */
+  --max-w: 1280px;
+  /* Horizontal gutter, grows with the viewport */
+  --gutter: clamp(12px, 3vw, 32px);
+  --gap: clamp(10px, 1.6vw, 18px);
+  --radius: 10px;
+}
+
+@media (max-width: 640px) {
+  :root { --nav-h: 52px; }
 }
 
 html, body, #root {
   width: 100%;
   min-height: 100dvh;
-  overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: 'Segoe UI', system-ui, sans-serif;
-  font-size: 14px;
-  user-select: none;
+  font-size: clamp(15px, 1.05vw, 17px);
+  line-height: 1.45;
 }
+
+html, body { overflow-x: hidden; }
 
 button {
   cursor: pointer;
   border: none;
   background: var(--surface);
   color: var(--text);
-  border-radius: 6px;
-  padding: 10px 18px;
-  font-size: 14px;
+  border-radius: var(--radius);
+  padding: 0.7em 1.2em;
+  font-size: 1rem;
+  font-family: inherit;
+  min-height: 44px;
   touch-action: manipulation;
   transition: background 0.15s;
 }
 button:active { background: var(--red); }
 
+input, select, textarea {
+  font-family: inherit;
+  font-size: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.65em 0.8em;
+  color: var(--text);
+  min-height: 44px;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--red);
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: var(--radius);
+  padding: clamp(12px, 1.6vw, 20px);
 }
+
+/* Small red section heading used across the tiles */
+.panel-title {
+  color: var(--red);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+/* Dashboard: three columns on desktop, stacked on narrow screens */
+.dash-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(200px, 260px);
+  align-items: stretch;
+}
+.dash-col { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; }
+
+@media (max-width: 1000px) {
+  .dash-grid { grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); }
+  .dash-grid > .dash-cal { grid-row: span 2; }
+}
+
+@media (max-width: 720px) {
+  .dash-grid { grid-template-columns: minmax(0, 1fr); }
+  .dash-grid > .dash-cal { grid-row: auto; }
+  .dash-cal { min-height: 340px; }
+  .dash-tasks { min-height: 280px; }
+}
+
+/* Slim scrollbars so scrollable tiles don't look chunky */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+*::-webkit-scrollbar-track { background: transparent; }

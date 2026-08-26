@@ -1,11 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 import os
 import datetime
 import pytz
+
+import token_store
 
 TZ = pytz.timezone("America/Los_Angeles")
 
@@ -14,18 +15,75 @@ router = APIRouter()
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 CALENDAR_IDS = ["pranav.takrani@gmail.com", "ptakrani@andrew.cmu.edu", "pranav@northstarrobotics.ai"]
 
+PROVIDER = "google_calendar"
+TOKEN_URI = "https://oauth2.googleapis.com/token"
+
+
 def get_credentials():
-    creds = None
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+    """Build Google credentials from the refresh token stored in Supabase.
+
+    There is no interactive fallback: on a server there is no browser to run
+    an installed-app OAuth flow in. If the stored token is missing or the
+    refresh fails, that is a configuration error the operator has to fix by
+    re-seeding the oauth_tokens row.
+    """
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise HTTPException(
+            status_code=500,
+            detail="GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not configured.",
+        )
+
+    try:
+        row = token_store.get_token(PROVIDER)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not read stored Google token: {e}")
+
+    if not row or not row.get("refresh_token"):
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "No Google Calendar refresh token found in the oauth_tokens table. "
+                "Re-run the OAuth consent flow locally and seed the 'google_calendar' row."
+            ),
+        )
+
+    expires_at = row.get("expires_at")
+    creds = Credentials(
+        token=row.get("access_token"),
+        refresh_token=row["refresh_token"],
+        token_uri=TOKEN_URI,
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=SCOPES,
+        # google-auth wants a naive UTC datetime. Treat a missing expiry as
+        # already expired so we refresh instead of sending a stale token.
+        expiry=datetime.datetime.fromtimestamp(
+            expires_at or 0, datetime.timezone.utc
+        ).replace(tzinfo=None),
+    )
+
+    if not creds.valid:
+        try:
             creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
-            creds = flow.run_local_server(port=8080)
-            with open("token.json", "w") as token:
-                token.write(creds.to_json())
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Google token refresh failed: {e}")
+        # Cache the fresh access token so later cold starts reuse it until it
+        # expires, instead of hitting Google's token endpoint every request.
+        try:
+            token_store.save_token(
+                PROVIDER,
+                access_token=creds.token,
+                refresh_token=creds.refresh_token or row["refresh_token"],
+                expires_at=int(creds.expiry.replace(tzinfo=datetime.timezone.utc).timestamp())
+                if creds.expiry
+                else None,
+            )
+        except Exception:
+            # A failed write-back only costs us an extra refresh next time.
+            pass
+
     return creds
 
 @router.get("/today")

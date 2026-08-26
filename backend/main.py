@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import spotify, calendar, system
+from routers import spotify, calendar
 
 app = FastAPI()
 
@@ -11,7 +11,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(system.router, prefix="/system")
+# routers/system.py is intentionally not mounted: psutil/vcgencmd read local
+# hardware, which does not exist in a serverless function.
 app.include_router(spotify.router, prefix="/spotify")
 app.include_router(calendar.router, prefix="/calendar")
 

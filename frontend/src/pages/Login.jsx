@@ -25,10 +25,10 @@ export default function Login() {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      height: '480px', width: '800px', background: 'var(--bg)',
+      minHeight: '100dvh', width: '100%', padding: 'var(--gutter)', background: 'var(--bg)',
     }}>
-      <form onSubmit={handleSubmit} className="card" style={{ width: 280, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ color: 'var(--red)', fontWeight: 700, fontSize: 18, textAlign: 'center' }}>CUM</div>
+      <form onSubmit={handleSubmit} className="card" style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ color: 'var(--red)', fontWeight: 800, fontSize: 'clamp(1.6rem, 6vw, 2.2rem)', letterSpacing: '0.08em', textAlign: 'center', marginBottom: 8 }}>CUM</div>
         <input
           type="email"
           placeholder="Email"
@@ -36,10 +36,7 @@ export default function Login() {
           onChange={(e) => setEmail(e.target.value)}
           autoFocus
           required
-          style={{
-            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6,
-            padding: '8px 10px', color: 'var(--text)', fontSize: 13,
-          }}
+          style={{ width: '100%' }}
         />
         <input
           type="password"
@@ -47,19 +44,15 @@ export default function Login() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          style={{
-            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6,
-            padding: '8px 10px', color: 'var(--text)', fontSize: 13,
-          }}
+          style={{ width: '100%' }}
         />
-        {error && <div style={{ color: '#ff2222', fontSize: 12 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--red-bright)', fontSize: '0.85rem' }}>{error}</div>}
         <button
           type="submit"
           disabled={busy}
           style={{
-            background: 'var(--red)', border: 'none', borderRadius: 6, padding: '8px 10px',
-            color: '#fff', fontWeight: 600, fontSize: 13, cursor: busy ? 'default' : 'pointer',
-            opacity: busy ? 0.6 : 1,
+            background: 'var(--red)', color: '#fff', fontWeight: 600,
+            cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
           }}
         >
           {busy ? 'Signing in...' : 'Sign in'}
