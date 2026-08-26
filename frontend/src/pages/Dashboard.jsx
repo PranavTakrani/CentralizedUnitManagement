@@ -11,13 +11,26 @@ const HOUR_COL = 40
 function CircleProgress({ val, goal }) {
   const pct = goal ? Math.min(val / goal, 1) : 0
   return (
-    <svg viewBox="0 0 150 150" style={{ width: '100%', maxWidth: 200, height: 'auto' }}>
+    <svg viewBox="0 0 150 150" style={{ width: '100%', maxWidth: 160, height: 'auto' }}>
       <circle cx={75} cy={75} r={RADIUS} fill="none" stroke="var(--border)" strokeWidth={12} />
       <circle cx={75} cy={75} r={RADIUS} fill="none" stroke="var(--red)" strokeWidth={12}
         strokeDasharray={`${pct * CIRC} ${CIRC}`} strokeLinecap="round" transform="rotate(-90 75 75)" />
       <text x={75} y={72} textAnchor="middle" fill="var(--text)" fontSize={28} fontWeight={700}>{val}</text>
       <text x={75} y={94} textAnchor="middle" fill="var(--text-dim)" fontSize={14}>/ {goal} cal</text>
     </svg>
+  )
+}
+
+function MacroBar({ label, val, goal, color }) {
+  const pct = goal ? Math.min((val / goal) * 100, 100) : 0
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ width: 30, fontSize: '0.75rem', color: 'var(--text-dim)' }}>{label}</span>
+      <div style={{ flex: 1, background: 'var(--border)', borderRadius: 6, height: 10, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 6 }} />
+      </div>
+      <span style={{ width: 56, fontSize: '0.72rem', color: 'var(--text-dim)', textAlign: 'right', whiteSpace: 'nowrap' }}>{val}/{goal}</span>
+    </div>
   )
 }
 
@@ -28,7 +41,7 @@ const priorityColor = (p) => p >= 2 ? '#ff2222' : p === 1 ? '#ff8800' : 'var(--t
 export default function Dashboard() {
   const [events, setEvents] = useState([])
   const [tasks, setTasks] = useState([])
-  const [cals, setCals] = useState(0)
+  const [meals, setMeals] = useState([])
   const [goals, setGoals] = useState(null)
   const [now, setNow] = useState(new Date())
   const [spotify, setSpotify] = useState(null)
@@ -40,11 +53,11 @@ export default function Dashboard() {
     const [start, end] = todayRange()
     const [{ data: t }, { data: m }, { data: g }] = await Promise.all([
       supabase.from('Tasks').select('*').eq('completed', false).order('due_date').order('priority', { ascending: false }),
-      supabase.from('meals').select('calories').gte('logged_at', start).lte('logged_at', end),
-      supabase.from('user_settings').select('daily_calories').limit(1).single(),
+      supabase.from('meals').select('*').gte('logged_at', start).lte('logged_at', end).order('logged_at', { ascending: false }),
+      supabase.from('user_settings').select('*').limit(1).single(),
     ])
     setTasks(t ?? [])
-    setCals((m ?? []).reduce((s, r) => s + (r.calories || 0), 0))
+    setMeals(m ?? [])
     setGoals(g)
   }
 
@@ -65,6 +78,10 @@ export default function Dashboard() {
   const endH = Math.min(23, now.getHours() + 10)
   const hours = Array.from({ length: endH - startH + 1 }, (_, i) => startH + i)
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60 - startH) * SLOT
+  const cals = meals.reduce((s, r) => s + (r.calories || 0), 0)
+  const protein = meals.reduce((s, r) => s + (r.protein_g || 0), 0)
+  const carbs = meals.reduce((s, r) => s + (r.carbs_g || 0), 0)
+  const fat = meals.reduce((s, r) => s + (r.fat_g || 0), 0)
   const goal = goals?.daily_calories ?? 0
   const remaining = Math.max(goal - cals, 0)
 
@@ -152,13 +169,33 @@ export default function Dashboard() {
           style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, cursor: 'pointer', minHeight: 0 }}
         >
           <div className="panel-title">Calories ›</div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <CircleProgress val={cals} goal={goal} />
             <div style={{ textAlign: 'center' }}>
-              <div style={{ color: 'var(--red-bright)', fontWeight: 700, fontSize: '1.15rem' }}>{remaining}</div>
-              <div style={{ color: 'var(--text-dim)', fontSize: '0.8rem', letterSpacing: '0.06em' }}>REMAINING</div>
+              <div style={{ color: 'var(--red-bright)', fontWeight: 700, fontSize: '1.05rem' }}>{remaining}</div>
+              <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem', letterSpacing: '0.06em' }}>REMAINING</div>
             </div>
           </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+            <MacroBar label="Pro" val={protein} goal={goals?.daily_protein_g ?? 0} color="#cc0000" />
+            <MacroBar label="Carb" val={carbs} goal={goals?.daily_carbs_g ?? 0} color="#ff6600" />
+            <MacroBar label="Fat" val={fat} goal={goals?.daily_fat_g ?? 0} color="#ffaa00" />
+          </div>
+
+          {meals.length > 0 && (
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', letterSpacing: '0.06em', flexShrink: 0 }}>RECENT</div>
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {meals.slice(0, 6).map(m => (
+                  <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: '0.8rem', borderBottom: '1px solid var(--border)', paddingBottom: 4 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.meals}</span>
+                    <span style={{ color: 'var(--text-dim)', flexShrink: 0 }}>{m.calories} cal</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

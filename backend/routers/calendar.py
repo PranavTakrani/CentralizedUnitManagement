@@ -101,14 +101,18 @@ def get_credentials():
 def get_today():
     return get_events(days=1)
 @router.get("/upcoming")
-def get_upcoming(days: int = 7):
-    return get_events(days=days)
+def get_upcoming(days: int = 7, start: str | None = None):
+    return get_events(days=days, start=start)
 
-def get_events(days=1):
+def get_events(days=1, start=None):
     creds = get_credentials()
     service = build("calendar", "v3", credentials=creds)
-    local_now = datetime.datetime.now(TZ)
-    local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if start:
+        y, mo, d = map(int, start.split("-"))
+        local_midnight = TZ.localize(datetime.datetime(y, mo, d))
+    else:
+        local_now = datetime.datetime.now(TZ)
+        local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
     time_min = local_midnight.astimezone(pytz.utc).isoformat()
     time_max = (local_midnight + datetime.timedelta(days=days)).astimezone(pytz.utc).isoformat()
 

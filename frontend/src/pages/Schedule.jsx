@@ -6,9 +6,11 @@ const SLOT_H = 48
 const GUTTER_W = 52
 const DAY_COL_W = 120
 const DAYS = 7
+const pad = (n) => String(n).padStart(2, '0')
 const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x }
 const toMins = (iso) => { const d = new Date(iso); return d.getHours() * 60 + d.getMinutes() }
 const fmtDay = (d) => d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
+const dateStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
 export default function Schedule() {
   const [events, setEvents] = useState([])
@@ -20,6 +22,11 @@ export default function Schedule() {
   const scrollRef = useRef(null)
   const now = new Date()
 
+  const weekStart = new Date(now)
+  weekStart.setDate(now.getDate() - now.getDay())
+  weekStart.setHours(0, 0, 0, 0)
+  const todayIndex = now.getDay()
+
   const hours = Array.from({ length: 24 }, (_, i) => i)
   const nowMins = now.getHours() * 60 + now.getMinutes()
   const nowTop = (nowMins / 60) * SLOT_H
@@ -30,8 +37,9 @@ export default function Schedule() {
   }
 
   useEffect(() => {
-    api.get('/calendar/upcoming', { params: { days: DAYS } }).then(r => setEvents(r.data)).catch(() => {}).finally(() => setLoading(false))
+    api.get('/calendar/upcoming', { params: { days: DAYS, start: dateStr(weekStart) } }).then(r => setEvents(r.data)).catch(() => {}).finally(() => setLoading(false))
     loadCalendars()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -59,7 +67,7 @@ export default function Schedule() {
   }
 
   const days = Array.from({ length: DAYS }, (_, i) => {
-    const d = new Date(); d.setDate(d.getDate() + i); d.setHours(0,0,0,0); return d
+    const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d
   })
 
   const eventsForDay = (day) => events
@@ -113,10 +121,10 @@ export default function Schedule() {
             }}>
               {days.map((d, i) => (
                 <div key={i} style={{
-                  flex: `0 0 ${DAY_COL_W}px`, textAlign: 'center',
+                  flex: `1 1 0`, minWidth: DAY_COL_W, textAlign: 'center',
                   fontSize: 'clamp(0.78rem, 1.3vw, 0.95rem)', fontWeight: 600,
-                  color: i === 0 ? 'var(--red)' : 'var(--text-dim)',
-                  paddingBottom: 8, borderBottom: `2px solid ${i === 0 ? 'var(--red)' : 'var(--border)'}`,
+                  color: i === todayIndex ? 'var(--red)' : 'var(--text-dim)',
+                  paddingBottom: 8, borderBottom: `2px solid ${i === todayIndex ? 'var(--red)' : 'var(--border)'}`,
                 }}>
                   {fmtDay(d)}
                 </div>
@@ -135,9 +143,9 @@ export default function Schedule() {
               </div>
 
               {days.map((day, di) => (
-                <div key={di} style={{ flex: `0 0 ${DAY_COL_W}px`, position: 'relative', borderLeft: '1px solid var(--border)' }}>
+                <div key={di} style={{ flex: `1 1 0`, minWidth: DAY_COL_W, position: 'relative', borderLeft: '1px solid var(--border)' }}>
                   {hours.map(h => <div key={h} style={{ height: SLOT_H, borderTop: '1px solid var(--border)' }} />)}
-                  {di === 0 && <div style={{ position: 'absolute', top: nowTop, left: 0, right: 0, height: 2, background: 'var(--red)', boxShadow: '0 0 6px var(--red)', zIndex: 2 }} />}
+                  {di === todayIndex && <div style={{ position: 'absolute', top: nowTop, left: 0, right: 0, height: 2, background: 'var(--red)', boxShadow: '0 0 6px var(--red)', zIndex: 2 }} />}
                   {eventsForDay(day).map((e, i) => {
                     const top = (e.startM / 60) * SLOT_H
                     return (
