@@ -1,6 +1,9 @@
 import axios from 'axios'
 import { supabase } from './supabase'
 
+// NOTE: VITE_API_URL is inlined at BUILD time by Vite. It must be set in the
+// frontend Vercel project's env vars and the deployment must rebuild (not reuse
+// build cache) for changes to take effect. Falls back to localhost for dev.
 const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000' })
 
 // Attach the current user's Supabase JWT so the backend can scope data to
