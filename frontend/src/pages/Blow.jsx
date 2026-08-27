@@ -83,15 +83,18 @@ export default function Blow() {
   useEffect(() => { if (me) loadConversations() }, [me, loadConversations])
 
   // ---- load an active conversation's messages/reactions/receipts ----------
+  // Fetch-only: does NOT write a read-receipt (that would re-trigger realtime
+  // and cause a reload feedback loop). Marking-read is done separately.
   const loadThread = useCallback(async (conversationId) => {
     if (!conversationId) return
     const { data: msgs } = await supabase
       .from('messages').select('*')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
-    setMessages(msgs || [])
+    const messageList = msgs || []
+    setMessages(messageList)
 
-    const ids = (msgs || []).map((m) => m.id)
+    const ids = messageList.map((m) => m.id)
     if (ids.length) {
       const { data: rx } = await supabase
         .from('reactions').select('*').in('message_id', ids)
@@ -105,36 +108,56 @@ export default function Blow() {
     const { data: rc } = await supabase
       .from('read_receipts').select('*').eq('conversation_id', conversationId)
     setReceipts(rc || [])
+  }, [])
 
-    // Mark as read (the GET) — upsert my last_read_at.
+  // Mark a conversation read (the GET). Separate from loadThread so it only
+  // fires on open, not on every realtime refresh.
+  const markRead = useCallback(async (conversationId) => {
+    if (!conversationId || !me) return
     await supabase.from('read_receipts').upsert(
       { conversation_id: conversationId, user_id: me, last_read_at: new Date().toISOString() },
       { onConflict: 'conversation_id,user_id' }
     )
   }, [me])
 
-  useEffect(() => { loadThread(activeId) }, [activeId, loadThread])
+  useEffect(() => {
+    if (!activeId) return
+    loadThread(activeId)
+    markRead(activeId)
+  }, [activeId, loadThread, markRead])
 
   // ---- Realtime: live POST/PATCH/DELETE + reactions + receipts ------------
+  // A single debounced reload coalesces bursts (send -> receipt -> reaction)
+  // into ONE refresh instead of 3-4 sequential 4-query reloads.
+  const reloadTimer = useRef(null)
   useEffect(() => {
     if (!activeId) return
     setPresence('101 Switching Protocols')
+
+    const scheduleReload = () => {
+      if (reloadTimer.current) clearTimeout(reloadTimer.current)
+      reloadTimer.current = setTimeout(() => loadThread(activeId), 250)
+    }
+
     const chan = supabase
       .channel(`blow:${activeId}`)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeId}` },
-        () => loadThread(activeId))
+        scheduleReload)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'reactions' },
-        () => loadThread(activeId))
+        scheduleReload)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'read_receipts', filter: `conversation_id=eq.${activeId}` },
-        () => loadThread(activeId))
+        scheduleReload)
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') setPresence('101 Switching Protocols · connected')
         if (status === 'CLOSED' || status === 'CHANNEL_ERROR') setPresence('connection closed')
       })
-    return () => { supabase.removeChannel(chan) }
+    return () => {
+      if (reloadTimer.current) clearTimeout(reloadTimer.current)
+      supabase.removeChannel(chan)
+    }
   }, [activeId, loadThread])
 
   // ---- autoscroll to newest ----------------------------------------------

@@ -54,7 +54,7 @@ export default function Dashboard() {
     const [{ data: t }, { data: m }, { data: g }] = await Promise.all([
       supabase.from('Tasks').select('*').eq('completed', false).order('due_date').order('priority', { ascending: false }),
       supabase.from('meals').select('*').gte('logged_at', start).lte('logged_at', end).order('logged_at', { ascending: false }),
-      supabase.from('user_settings').select('*').limit(1).single(),
+      supabase.from('user_settings').select('*').limit(1).maybeSingle(),
     ])
     setTasks(t ?? [])
     setMeals(m ?? [])
@@ -96,28 +96,31 @@ export default function Dashboard() {
       >
         <div className="panel-title">Today ›</div>
         <div ref={calRef} style={{ flex: 1, overflowY: 'auto', position: 'relative', minHeight: 0 }}>
-          {hours.map(h => (
-            <div key={h} style={{ display: 'flex', height: SLOT, borderTop: '1px solid var(--border)' }}>
-              <span style={{ width: HOUR_COL, fontSize: '0.75rem', color: 'var(--text-dim)', paddingTop: 2, textAlign: 'right', paddingRight: 8, flexShrink: 0 }}>
-                {h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h-12}p`}
-              </span>
-              <div style={{ flex: 1, borderLeft: '1px solid var(--border)' }} />
-            </div>
-          ))}
-          <div style={{ position: 'absolute', left: HOUR_COL, right: 0, top: nowTop, height: 2, background: 'var(--red)', boxShadow: '0 0 6px var(--red)', zIndex: 2 }} />
-          {events.filter(e => e.start).map((e, i) => {
-            const d = new Date(e.start)
-            const startM = d.getHours() * 60 + d.getMinutes()
-            const endD = e.end ? new Date(e.end) : new Date(d.getTime() + 3600000)
-            const dur = (endD.getHours() * 60 + endD.getMinutes()) - startM
-            const top = (startM / 60 - startH) * SLOT
-            if (top < 0 || top > hours.length * SLOT) return null
-            return (
-              <div key={i} style={{ position: 'absolute', left: HOUR_COL + 4, right: 2, top: top + 1, height: Math.max((dur / 60) * SLOT - 2, 20), background: 'var(--red)', borderRadius: 5, padding: '2px 7px', overflow: 'hidden', zIndex: 1 }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title}</div>
+          <div style={{ position: 'relative', minHeight: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+            {hours.map(h => (
+              <div key={h} style={{ display: 'flex', flex: 1, minHeight: SLOT, borderTop: '1px solid var(--border)' }}>
+                <span style={{ width: HOUR_COL, fontSize: '0.75rem', color: 'var(--text-dim)', paddingTop: 2, textAlign: 'right', paddingRight: 8, flexShrink: 0 }}>
+                  {h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h-12}p`}
+                </span>
+                <div style={{ flex: 1, borderLeft: '1px solid var(--border)' }} />
               </div>
-            )
-          })}
+            ))}
+            <div style={{ position: 'absolute', left: HOUR_COL, right: 0, top: `${(nowTop / (hours.length * SLOT)) * 100}%`, height: 2, background: 'var(--red)', boxShadow: '0 0 6px var(--red)', zIndex: 2 }} />
+            {events.filter(e => e.start).map((e, i) => {
+              const d = new Date(e.start)
+              const startM = d.getHours() * 60 + d.getMinutes()
+              const endD = e.end ? new Date(e.end) : new Date(d.getTime() + 3600000)
+              const dur = (endD.getHours() * 60 + endD.getMinutes()) - startM
+              const topPx = (startM / 60 - startH) * SLOT
+              const total = hours.length * SLOT
+              if (topPx < 0 || topPx > total) return null
+              return (
+                <div key={i} style={{ position: 'absolute', left: HOUR_COL + 4, right: 2, top: `${(topPx / total) * 100}%`, height: `${(Math.max((dur / 60) * SLOT - 2, 20) / total) * 100}%`, background: 'var(--red)', borderRadius: 5, padding: '2px 7px', overflow: 'hidden', zIndex: 1 }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title}</div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
 
