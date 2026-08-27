@@ -16,10 +16,10 @@ declare
   primary_uid uuid;
 begin
   select id into primary_uid from auth.users where email = 'pranav.takrani@gmail.com' limit 1;
-  if primary_uid is not null then
-    update public.oauth_tokens set user_id = primary_uid
-    where provider = 'google_calendar' and user_id is null;
+  if primary_uid is null then
+    raise exception 'primary user pranav.takrani@gmail.com not found';
   end if;
+  update public.oauth_tokens set user_id = primary_uid where user_id is null;
 end $$;
 
 alter table public.oauth_tokens drop constraint if exists oauth_tokens_pkey;
@@ -59,11 +59,10 @@ create policy calendar_shares_delete on public.calendar_shares
   for delete using (owner_id = auth.uid());
 
 -- ---- drop the old shared-calendar feature (fully replaced) ---------------
-drop trigger if exists on_shared_calendar_created on public.shared_calendars;
+drop table if exists public.shared_calendar_events cascade;
+drop table if exists public.shared_calendar_members cascade;
+drop table if exists public.shared_calendars cascade;
 drop function if exists public.handle_new_shared_calendar();
 drop function if exists public.add_shared_calendar_member(uuid, text);
 drop function if exists public.is_shared_calendar_owner(uuid);
 drop function if exists public.is_shared_calendar_member(uuid);
-drop table if exists public.shared_calendar_events;
-drop table if exists public.shared_calendar_members;
-drop table if exists public.shared_calendars;
