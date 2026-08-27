@@ -14,6 +14,9 @@ router = APIRouter()
 
 SCOPE = "user-read-currently-playing user-read-playback-state user-modify-playback-state"
 PROVIDER = "spotify"
+# Spotify is a single-tenant integration (the app owner's account only), so
+# it uses a fixed user_id rather than a per-request caller.
+OWNER_USER_ID = "a52d07e3-e8cc-4811-9a33-270e1e7b3517"
 
 
 class SupabaseCacheHandler(CacheHandler):
@@ -25,7 +28,7 @@ class SupabaseCacheHandler(CacheHandler):
         # tries to bind a local HTTP server, which hangs/crashes on
         # serverless. A real failure (e.g. Supabase unreachable) should
         # surface as an error instead of triggering that fallback.
-        row = token_store.get_token(PROVIDER)
+        row = token_store.get_token(PROVIDER, OWNER_USER_ID)
         if not row or not row.get("refresh_token"):
             return None
         return {
@@ -42,12 +45,13 @@ class SupabaseCacheHandler(CacheHandler):
         if not refresh_token:
             # refresh_token is NOT NULL in the table; Spotify omits it on some
             # refresh responses, so fall back to the one already stored.
-            existing = token_store.get_token(PROVIDER) or {}
+            existing = token_store.get_token(PROVIDER, OWNER_USER_ID) or {}
             refresh_token = existing.get("refresh_token")
             if not refresh_token:
                 return
         token_store.save_token(
             PROVIDER,
+            OWNER_USER_ID,
             access_token=token_info.get("access_token"),
             refresh_token=refresh_token,
             expires_at=token_info.get("expires_at"),

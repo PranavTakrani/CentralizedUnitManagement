@@ -1,33 +1,39 @@
 import { useEffect, useState, useRef } from 'react'
 import api from '../lib/api'
-import { supabase } from '../lib/supabase'
 
 const SLOT_H = 48
 const GUTTER_W = 52
 const DAY_COL_W = 120
 const DAYS = 7
+const SHARE_COLORS = ['#3ea6ff', '#ffb020', '#8a6dff', '#2fd88a', '#ff5ea3']
 const pad = (n) => String(n).padStart(2, '0')
 const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x }
 const toMins = (iso) => { const d = new Date(iso); return d.getHours() * 60 + d.getMinutes() }
 const fmtDay = (d) => d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
 const dateStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const colorForShare = (id) => {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
+  return SHARE_COLORS[h % SHARE_COLORS.length]
+}
 
 export default function Schedule() {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
-  const [calendars, setCalendars] = useState([])
   const [showCalendars, setShowCalendars] = useState(false)
-  const [newCalId, setNewCalId] = useState('')
-  const [newCalLabel, setNewCalLabel] = useState('')
 
-  // ---- shared calendars (backend-sourced, NOT Google) ----
-  const [sharedCals, setSharedCals] = useState([])          // [{id,name,color,owner_id}]
-  const [sharedEvents, setSharedEvents] = useState([])       // [{id,calendar_id,title,starts_at,ends_at,location}]
+  // ---- Google Calendar connection + enabled calendars ----
+  const [connected, setConnected] = useState(null) // null = unknown yet
+  const [googleCals, setGoogleCals] = useState([])  // [{id,summary,color,primary}]
+  const [enabledCals, setEnabledCals] = useState([]) // rows from our own `calendars` table
+  const [calErr, setCalErr] = useState(null)
+
+  // ---- sharing calendars with other users ----
   const [showShared, setShowShared] = useState(false)
-  const [newSharedName, setNewSharedName] = useState('')
-  const [newSharedColor, setNewSharedColor] = useState('#3ea6ff')
-  const [memberEmail, setMemberEmail] = useState({})         // calendarId -> email draft
-  const [sharedForm, setSharedForm] = useState({ calendar_id: '', title: '', date: '', start: '09:00', end: '10:00', location: '' })
+  const [myShares, setMyShares] = useState([])       // calendars I've sent
+  const [sharedWithMe, setSharedWithMe] = useState([]) // calendars sent to me
+  const [sharedEvents, setSharedEvents] = useState([])
+  const [shareForm, setShareForm] = useState({ calendar_id: '', email: '' })
   const [sharedErr, setSharedErr] = useState(null)
 
   const scrollRef = useRef(null)
@@ -42,28 +48,55 @@ export default function Schedule() {
   const nowMins = now.getHours() * 60 + now.getMinutes()
   const nowTop = (nowMins / 60) * SLOT_H
 
-  const loadCalendars = async () => {
-    const { data } = await supabase.from('calendars').select('*').order('created_at')
-    setCalendars(data ?? [])
+  const loadConnection = async () => {
+    try {
+      const { data } = await api.get('/calendar/status')
+      setConnected(!!data.connected)
+      if (data.connected) {
+        const { data: cals } = await api.get('/calendar/google-calendars')
+        setGoogleCals(Array.isArray(cals) ? cals : [])
+      }
+    } catch {
+      setConnected(false)
+    }
+  }
+
+  const loadEnabledCalendars = async () => {
+    try {
+      const { data } = await api.get('/calendar/enabled')
+      setEnabledCals(Array.isArray(data) ? data : [])
+    } catch {
+      setEnabledCals([])
+    }
   }
 
   const loadShared = async () => {
     try {
-      const [cals, evs] = await Promise.all([
-        api.get('/shared-calendar/list'),
-        api.get('/shared-calendar/events'),
+      const [mine, withMe, evs] = await Promise.all([
+        api.get('/calendar/my-shares'),
+        api.get('/calendar/shared-with-me'),
+        api.get('/calendar/shared-events', { params: { days: DAYS, start: dateStr(weekStart) } }),
       ])
-      setSharedCals(Array.isArray(cals.data) ? cals.data : [])
+      setMyShares(Array.isArray(mine.data) ? mine.data : [])
+      setSharedWithMe(Array.isArray(withMe.data) ? withMe.data : [])
       setSharedEvents(Array.isArray(evs.data) ? evs.data : [])
     } catch {
-      setSharedCals([]); setSharedEvents([])
+      setMyShares([]); setSharedWithMe([]); setSharedEvents([])
     }
   }
 
-  useEffect(() => {
+  const refreshAll = () => {
     api.get('/calendar/upcoming', { params: { days: DAYS, start: dateStr(weekStart) } }).then(r => setEvents(Array.isArray(r.data) ? r.data : [])).catch(() => {}).finally(() => setLoading(false))
-    loadCalendars()
+    loadConnection()
+    loadEnabledCalendars()
     loadShared()
+  }
+
+  useEffect(() => {
+    refreshAll()
+    if (new URLSearchParams(window.location.search).get('connected') === '1') {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -77,67 +110,49 @@ export default function Schedule() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading])
 
-  const addCalendar = async () => {
-    if (!newCalId.trim()) return
-    const { error } = await supabase.from('calendars').insert({
-      calendar_id: newCalId.trim(), label: newCalLabel.trim() || null,
-    })
-    if (error) { console.error('Insert calendar error:', error); return }
-    setNewCalId(''); setNewCalLabel(''); loadCalendars()
-  }
-
-  const removeCalendar = async (id) => {
-    await supabase.from('calendars').delete().eq('id', id)
-    loadCalendars()
-  }
-
-  // ---- shared-calendar handlers ----
-  const sharedColorById = Object.fromEntries(sharedCals.map(c => [c.id, c.color]))
-
-  const createShared = async () => {
-    setSharedErr(null)
-    if (!newSharedName.trim()) return
+  const connectGoogle = async () => {
+    setCalErr(null)
     try {
-      await api.post('/shared-calendar/create', { name: newSharedName.trim(), color: newSharedColor })
-      setNewSharedName(''); setNewSharedColor('#3ea6ff'); loadShared()
-    } catch (e) { setSharedErr(e?.response?.data?.detail || 'create failed') }
+      const { data } = await api.post('/calendar/oauth/start')
+      window.location.href = data.url
+    } catch (e) {
+      setCalErr(e?.response?.data?.detail || 'could not start Google connect')
+    }
   }
 
-  const deleteShared = async (id) => {
-    try { await api.delete(`/shared-calendar/${id}`); loadShared() }
-    catch (e) { setSharedErr(e?.response?.data?.detail || 'delete failed') }
-  }
+  const enabledIds = new Set(enabledCals.map(c => c.calendar_id))
 
-  const addMember = async (calendarId) => {
-    const email = (memberEmail[calendarId] || '').trim()
-    if (!email) return
-    setSharedErr(null)
+  const toggleCalendar = async (cal) => {
+    setCalErr(null)
     try {
-      await api.post('/shared-calendar/members', { calendar_id: calendarId, email })
-      setMemberEmail(m => ({ ...m, [calendarId]: '' }))
-    } catch (e) { setSharedErr(e?.response?.data?.detail || 'could not add member') }
+      if (enabledIds.has(cal.id)) {
+        const row = enabledCals.find(c => c.calendar_id === cal.id)
+        await api.delete(`/calendar/enabled/${row.id}`)
+      } else {
+        await api.post('/calendar/enabled', { calendar_id: cal.id, label: cal.summary })
+      }
+      await loadEnabledCalendars()
+      refreshAll()
+    } catch (e) {
+      setCalErr(e?.response?.data?.detail || 'could not update calendar')
+    }
   }
 
-  const addSharedEvent = async () => {
+  // ---- sharing handlers ----
+  const shareCalendar = async () => {
     setSharedErr(null)
-    const { calendar_id, title, date, start, end, location } = sharedForm
-    if (!calendar_id || !title.trim() || !date) { setSharedErr('pick a calendar, title, and date'); return }
+    const { calendar_id, email } = shareForm
+    if (!calendar_id || !email.trim()) { setSharedErr('pick a calendar and enter an email'); return }
     try {
-      await api.post('/shared-calendar/events', {
-        calendar_id,
-        title: title.trim(),
-        starts_at: new Date(`${date}T${start}`).toISOString(),
-        ends_at: new Date(`${date}T${end}`).toISOString(),
-        location: location.trim() || null,
-      })
-      setSharedForm(f => ({ ...f, title: '', location: '' }))
+      await api.post('/calendar/share', { calendar_id, email: email.trim() })
+      setShareForm(f => ({ ...f, email: '' }))
       loadShared()
-    } catch (e) { setSharedErr(e?.response?.data?.detail || 'could not add event') }
+    } catch (e) { setSharedErr(e?.response?.data?.detail || 'could not share calendar') }
   }
 
-  const deleteSharedEvent = async (id) => {
-    try { await api.delete(`/shared-calendar/events/${id}`); loadShared() }
-    catch (e) { setSharedErr(e?.response?.data?.detail || 'delete failed') }
+  const revokeShare = async (id) => {
+    try { await api.delete(`/calendar/share/${id}`); loadShared() }
+    catch (e) { setSharedErr(e?.response?.data?.detail || 'could not revoke') }
   }
 
   const days = Array.from({ length: DAYS }, (_, i) => {
@@ -147,10 +162,10 @@ export default function Schedule() {
   const eventsForDay = (day) => {
     const google = events
       .filter(e => e.start && startOfDay(new Date(e.start)).getTime() === day.getTime())
-      .map(e => ({ id: `g-${e.title}-${e.start}`, title: e.title, location: e.location, startM: toMins(e.start), dur: e.end ? toMins(e.end) - toMins(e.start) : 60, color: 'var(--red)', shared: false }))
+      .map(e => ({ id: `g-${e.title}-${e.start}`, title: e.title, location: e.location, startM: toMins(e.start), dur: e.end ? toMins(e.end) - toMins(e.start) : 60, color: 'var(--red)' }))
     const shared = sharedEvents
-      .filter(e => e.starts_at && startOfDay(new Date(e.starts_at)).getTime() === day.getTime())
-      .map(e => ({ id: e.id, title: e.title, location: e.location, startM: toMins(e.starts_at), dur: e.ends_at ? toMins(e.ends_at) - toMins(e.starts_at) : 60, color: sharedColorById[e.calendar_id] || '#3ea6ff', shared: true }))
+      .filter(e => e.start && startOfDay(new Date(e.start)).getTime() === day.getTime())
+      .map((e, i) => ({ id: `s-${e.share_id}-${e.start}-${i}`, title: e.label ? `${e.title} (${e.label})` : e.title, location: e.location, startM: toMins(e.start), dur: e.end ? toMins(e.end) - toMins(e.start) : 60, color: colorForShare(e.share_id) }))
     return [...google, ...shared]
   }
 
@@ -160,95 +175,83 @@ export default function Schedule() {
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 'var(--gap)' }}>
       <div className="card" style={{ flexShrink: 0 }}>
         <button onClick={() => setShowCalendars(v => !v)} style={{ background: 'transparent', color: 'var(--text-dim)', padding: '4px 0' }}>
-          {showCalendars ? '−' : '+'} Manage calendars ({calendars.length})
+          {showCalendars ? '−' : '+'} Manage calendars ({enabledCals.length})
         </button>
         {showCalendars && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-            {calendars.map(c => (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ flex: '0 0 160px', color: 'var(--text)' }}>{c.label || '—'}</span>
-                <span style={{ flex: '1 1 200px', minWidth: 0, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.calendar_id}</span>
-                <button onClick={() => removeCalendar(c.id)} style={{ padding: '4px 10px', minHeight: 30, color: 'var(--red-bright)', background: 'transparent' }}>✕</button>
-              </div>
+            {calErr && <div style={{ color: 'var(--red-bright)', fontSize: '0.8rem' }}>{calErr}</div>}
+            {connected === false && (
+              <button onClick={connectGoogle} style={{ background: 'var(--red)', color: '#fff', fontWeight: 600, alignSelf: 'flex-start' }}>
+                Connect Google Calendar
+              </button>
+            )}
+            {connected === true && googleCals.length === 0 && (
+              <div style={{ color: 'var(--text-dim)' }}>No Google calendars found.</div>
+            )}
+            {connected === true && googleCals.map(c => (
+              <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={enabledIds.has(c.id)} onChange={() => toggleCalendar(c)} />
+                <span style={{ width: 14, height: 14, borderRadius: 4, background: c.color || 'var(--red)', flexShrink: 0 }} />
+                <span style={{ color: 'var(--text)' }}>{c.summary}{c.primary ? ' (primary)' : ''}</span>
+              </label>
             ))}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-              <input
-                value={newCalId}
-                onChange={e => setNewCalId(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addCalendar()}
-                placeholder="Calendar ID / email..."
-                style={{ flex: '1 1 220px', minWidth: 0 }}
-              />
-              <input
-                value={newCalLabel}
-                onChange={e => setNewCalLabel(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addCalendar()}
-                placeholder="Label (optional)"
-                style={{ flex: '0 1 160px', minWidth: 0 }}
-              />
-              <button onClick={addCalendar} style={{ background: 'var(--red)', color: '#fff', fontWeight: 600 }}>Add</button>
-            </div>
+            {connected === true && (
+              <button onClick={connectGoogle} style={{ background: 'transparent', color: 'var(--text-dim)', alignSelf: 'flex-start', padding: '4px 0' }}>
+                Reconnect Google Calendar
+              </button>
+            )}
           </div>
         )}
       </div>
 
       <div className="card" style={{ flexShrink: 0 }}>
         <button onClick={() => setShowShared(v => !v)} style={{ background: 'transparent', color: 'var(--text-dim)', padding: '4px 0' }}>
-          {showShared ? '−' : '+'} Shared calendars ({sharedCals.length})
+          {showShared ? '−' : '+'} Shared calendars ({sharedWithMe.length})
         </button>
         {showShared && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
             {sharedErr && <div style={{ color: 'var(--red-bright)', fontSize: '0.8rem' }}>{sharedErr}</div>}
 
-            {/* existing shared calendars */}
-            {sharedCals.map(c => (
-              <div key={c.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ width: 14, height: 14, borderRadius: 4, background: c.color, flexShrink: 0, boxShadow: `0 0 6px ${c.color}` }} />
-                  <span style={{ fontWeight: 600, flex: 1 }}>{c.name}</span>
-                  <button onClick={() => deleteShared(c.id)} style={{ padding: '4px 10px', minHeight: 30, color: 'var(--red-bright)', background: 'transparent' }}>✕</button>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <input
-                    value={memberEmail[c.id] || ''}
-                    onChange={e => setMemberEmail(m => ({ ...m, [c.id]: e.target.value }))}
-                    onKeyDown={e => e.key === 'Enter' && addMember(c.id)}
-                    placeholder="Add member by email..."
-                    style={{ flex: '1 1 220px', minWidth: 0, fontSize: '0.85rem' }}
-                  />
-                  <button onClick={() => addMember(c.id)} style={{ background: c.color, color: '#000', fontWeight: 600 }}>Invite</button>
-                </div>
+            {/* send one of my calendars to a user */}
+            <div>
+              <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: 6 }}>Send a calendar</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <select value={shareForm.calendar_id} onChange={e => setShareForm(f => ({ ...f, calendar_id: e.target.value }))} style={{ flex: '1 1 160px', minWidth: 0 }}>
+                  <option value="">calendar…</option>
+                  {googleCals.map(c => <option key={c.id} value={c.id}>{c.summary}</option>)}
+                </select>
+                <input
+                  value={shareForm.email}
+                  onChange={e => setShareForm(f => ({ ...f, email: e.target.value }))}
+                  onKeyDown={e => e.key === 'Enter' && shareCalendar()}
+                  placeholder="Recipient email..."
+                  style={{ flex: '1 1 200px', minWidth: 0 }}
+                />
+                <button onClick={shareCalendar} style={{ background: 'var(--red)', color: '#fff', fontWeight: 600 }}>Send</button>
               </div>
-            ))}
-
-            {/* create a shared calendar */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input
-                value={newSharedName}
-                onChange={e => setNewSharedName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && createShared()}
-                placeholder="New shared calendar name..."
-                style={{ flex: '1 1 200px', minWidth: 0 }}
-              />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', fontSize: '0.85rem' }}>
-                color
-                <input type="color" value={newSharedColor} onChange={e => setNewSharedColor(e.target.value)} style={{ width: 40, height: 40, padding: 2, minHeight: 0 }} />
-              </label>
-              <button onClick={createShared} style={{ background: 'var(--red)', color: '#fff', fontWeight: 600 }}>Create</button>
             </div>
 
-            {/* add an event to a shared calendar */}
-            {sharedCals.length > 0 && (
-              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <select value={sharedForm.calendar_id} onChange={e => setSharedForm(f => ({ ...f, calendar_id: e.target.value }))} style={{ flex: '1 1 140px', minWidth: 0 }}>
-                  <option value="">calendar…</option>
-                  {sharedCals.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <input value={sharedForm.title} onChange={e => setSharedForm(f => ({ ...f, title: e.target.value }))} placeholder="Event title" style={{ flex: '1 1 140px', minWidth: 0 }} />
-                <input type="date" value={sharedForm.date} onChange={e => setSharedForm(f => ({ ...f, date: e.target.value }))} style={{ flex: '0 1 150px', minWidth: 0 }} />
-                <input type="time" value={sharedForm.start} onChange={e => setSharedForm(f => ({ ...f, start: e.target.value }))} style={{ flex: '0 1 110px', minWidth: 0 }} />
-                <input type="time" value={sharedForm.end} onChange={e => setSharedForm(f => ({ ...f, end: e.target.value }))} style={{ flex: '0 1 110px', minWidth: 0 }} />
-                <button onClick={addSharedEvent} style={{ background: 'var(--red)', color: '#fff', fontWeight: 600 }}>Add event</button>
+            {myShares.length > 0 && (
+              <div>
+                <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: 6 }}>Calendars I've sent</div>
+                {myShares.map(s => (
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ flex: 1, color: 'var(--text)' }}>{s.label || s.calendar_id}</span>
+                    <button onClick={() => revokeShare(s.id)} style={{ padding: '4px 10px', minHeight: 30, color: 'var(--red-bright)', background: 'transparent' }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {sharedWithMe.length > 0 && (
+              <div>
+                <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: 6 }}>Shared with me</div>
+                {sharedWithMe.map(s => (
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ width: 14, height: 14, borderRadius: 4, background: colorForShare(s.id), flexShrink: 0 }} />
+                    <span style={{ flex: 1, color: 'var(--text)' }}>{s.label || s.calendar_id}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
