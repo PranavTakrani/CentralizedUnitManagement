@@ -48,7 +48,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const calRef = useRef(null)
 
-  const loadCalendar = () => api.get('/calendar/today').then(r => setEvents(r.data)).catch(() => {})
+  const loadCalendar = () => api.get('/calendar/today').then(r => setEvents(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   const loadSupabase = async () => {
     const [start, end] = todayRange()
     const [{ data: t }, { data: m }, { data: g }] = await Promise.all([

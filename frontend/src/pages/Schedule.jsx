@@ -53,15 +53,15 @@ export default function Schedule() {
         api.get('/shared-calendar/list'),
         api.get('/shared-calendar/events'),
       ])
-      setSharedCals(cals.data ?? [])
-      setSharedEvents(evs.data ?? [])
+      setSharedCals(Array.isArray(cals.data) ? cals.data : [])
+      setSharedEvents(Array.isArray(evs.data) ? evs.data : [])
     } catch {
       setSharedCals([]); setSharedEvents([])
     }
   }
 
   useEffect(() => {
-    api.get('/calendar/upcoming', { params: { days: DAYS, start: dateStr(weekStart) } }).then(r => setEvents(r.data)).catch(() => {}).finally(() => setLoading(false))
+    api.get('/calendar/upcoming', { params: { days: DAYS, start: dateStr(weekStart) } }).then(r => setEvents(Array.isArray(r.data) ? r.data : [])).catch(() => {}).finally(() => setLoading(false))
     loadCalendars()
     loadShared()
     // eslint-disable-next-line react-hooks/exhaustive-deps
