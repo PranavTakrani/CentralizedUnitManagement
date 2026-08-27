@@ -50,7 +50,7 @@ export default function Calories() {
     const [start, end] = todayRange()
     const [{ data: meals }, { data: settings }] = await Promise.all([
       supabase.from('meals').select('*').gte('logged_at', start).lte('logged_at', end).order('logged_at'),
-      supabase.from('user_settings').select('*').limit(1).single()
+      supabase.from('user_settings').select('*').limit(1).maybeSingle()
     ])
     setLog(meals ?? [])
     setGoals(settings)

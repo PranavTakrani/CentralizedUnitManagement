@@ -165,6 +165,20 @@ export default function Blow() {
     setActiveId(cid)
   }
 
+  // ---- accept / decline an incoming request (the GET) ---------------------
+  const acceptRequest = async (conv) => {
+    await supabase.from('conversations').update({ status: 'accepted' }).eq('id', conv.id)
+    await loadConversations()
+    setActiveId(conv.id)
+  }
+
+  const declineRequest = async (conv) => {
+    // decline = delete the pending conversation (RLS: participant delete)
+    await supabase.from('conversations').delete().eq('id', conv.id)
+    if (activeId === conv.id) setActiveId(null)
+    await loadConversations()
+  }
+
   // ---- send / edit (POST / PATCH) -----------------------------------------
   const sendRequest = async (e) => {
     e.preventDefault()
@@ -222,14 +236,20 @@ export default function Blow() {
   // Peer's last_read_at, for "Read" delivery status.
   const peerReadAt = receipts.find((r) => r.user_id === activePeerId)?.last_read_at
 
+  // Split: incoming pending requests (someone opened a socket with me and I
+  // haven't accepted) vs established/accepted connections. A request is
+  // "incoming" when it's pending AND I did not create it.
+  const pendingRequests = conversations.filter(
+    (c) => c.status === 'pending' && c.created_by !== me
+  )
+  const activeConnections = conversations.filter(
+    (c) => !(c.status === 'pending' && c.created_by !== me)
+  )
+
   return (
-    <div style={{
-      flex: 1, minHeight: 0, display: 'grid',
-      gridTemplateColumns: 'minmax(220px, 300px) minmax(0, 1fr)',
-      gap: 'var(--gap)', fontFamily: MONO,
-    }}>
+    <div className="blow-grid" style={{ fontFamily: MONO }}>
       {/* ---- LEFT: connections list + new request ---- */}
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, gap: 12 }}>
+      <div className="card blow-sidebar">
         <div className="panel-title">/connections</div>
 
         <form onSubmit={startByEmail} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -250,13 +270,49 @@ export default function Blow() {
           )}
         </form>
 
+        {/* ---- incoming pending requests (accept/decline the GET) ---- */}
+        {pendingRequests.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ color: METHOD_COLORS.PATCH, fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.06em' }}>
+              ⇄ PENDING REQUESTS · {pendingRequests.length}
+            </div>
+            {pendingRequests.map((c) => {
+              const pid = c.user_low === me ? c.user_high : c.user_low
+              const p = peers[pid]
+              return (
+                <div key={c.id} style={{
+                  border: `1px solid ${METHOD_COLORS.PATCH}`, borderRadius: 8, padding: '8px 10px',
+                  display: 'flex', flexDirection: 'column', gap: 6, background: 'var(--bg)',
+                }}>
+                  <div style={{ fontSize: '0.75rem' }}>
+                    <span style={{ color: METHOD_COLORS.GET, fontWeight: 700 }}>GET</span>{' '}
+                    /connect — <span style={{ fontWeight: 600 }}>@{p?.display_name || p?.email || '...'}</span>
+                  </div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-dim)' }}>{p?.email}</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => acceptRequest(c)} style={{
+                      flex: 1, minHeight: 0, padding: '4px 0', background: METHOD_COLORS.POST,
+                      color: '#03110b', fontWeight: 800, fontFamily: MONO, fontSize: '0.7rem',
+                    }}>200 Accept</button>
+                    <button onClick={() => declineRequest(c)} style={{
+                      flex: 1, minHeight: 0, padding: '4px 0', background: 'transparent',
+                      border: `1px solid ${METHOD_COLORS.DELETE}`, color: METHOD_COLORS.DELETE,
+                      fontWeight: 800, fontFamily: MONO, fontSize: '0.7rem',
+                    }}>403 Decline</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0 }}>
-          {conversations.length === 0 && (
+          {activeConnections.length === 0 && (
             <div style={{ color: 'var(--text-dim)', fontSize: '0.78rem' }}>
               204 No Content — no open connections yet.
             </div>
           )}
-          {conversations.map((c) => {
+          {activeConnections.map((c) => {
             const pid = c.user_low === me ? c.user_high : c.user_low
             const p = peers[pid]
             const isActive = c.id === activeId
@@ -278,7 +334,7 @@ export default function Blow() {
       </div>
 
       {/* ---- RIGHT: the request/response log ---- */}
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, padding: 0 }}>
+      <div className="card blow-thread">
         {/* status/header bar */}
         <div style={{
           padding: '10px 14px', borderBottom: '1px solid var(--border)',

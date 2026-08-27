@@ -108,3 +108,30 @@ input:focus, select:focus, textarea:focus {
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* ---- BLOW messaging layout ---- */
+.blow-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: var(--gap);
+}
+.blow-sidebar { display: flex; flex-direction: column; min-height: 0; gap: 12px; }
+.blow-thread  { display: flex; flex-direction: column; min-height: 0; padding: 0; }
+
+@media (max-width: 720px) {
+  /* Stack the whole page and let it scroll as one column so the message
+     widget is reachable below the connections sidebar. */
+  .blow-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: min-content;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Cap the sidebar so it can't consume the whole viewport; its own list
+     scrolls internally. */
+  .blow-sidebar { max-height: 45dvh; }
+  /* Give the thread a real height on mobile so the log + composer show. */
+  .blow-thread { min-height: 70dvh; }
+}

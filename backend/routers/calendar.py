@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from supabase import create_client
 import os
 import datetime
 import pytz
@@ -18,15 +19,27 @@ PROVIDER = "google_calendar"
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 
-def get_calendar_ids():
-    """Calendar IDs to pull events from, managed by the user via the frontend
-    (stored in the 'calendars' Supabase table rather than hardcoded)."""
-    result = (
-        token_store.get_client()
-        .table("calendars")
-        .select("calendar_id")
-        .execute()
-    )
+def _user_calendar_ids(authorization: str | None):
+    """Calendar IDs for the CALLING user only.
+
+    The 'calendars' table is now per-user (RLS scoped to auth.uid()). We build a
+    Supabase client authenticated as the caller so we read only their rows,
+    instead of the service_role client which would pull every user's calendars.
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        # No identity -> no calendars. Prevents cross-user leakage.
+        return []
+    token = authorization.split(" ", 1)[1].strip()
+    url = os.getenv("SUPABASE_URL")
+    anon = os.getenv("SUPABASE_ANON_KEY")
+    if not url or not anon:
+        raise HTTPException(
+            status_code=500,
+            detail="SUPABASE_URL / SUPABASE_ANON_KEY must be set.",
+        )
+    client = create_client(url, anon)
+    client.postgrest.auth(token)
+    result = client.table("calendars").select("calendar_id").execute()
     return [row["calendar_id"] for row in (result.data or [])]
 
 
@@ -98,13 +111,13 @@ def get_credentials():
     return creds
 
 @router.get("/today")
-def get_today():
-    return get_events(days=1)
+def get_today(authorization: str | None = Header(default=None)):
+    return get_events(days=1, authorization=authorization)
 @router.get("/upcoming")
-def get_upcoming(days: int = 7, start: str | None = None):
-    return get_events(days=days, start=start)
+def get_upcoming(days: int = 7, start: str | None = None, authorization: str | None = Header(default=None)):
+    return get_events(days=days, start=start, authorization=authorization)
 
-def get_events(days=1, start=None):
+def get_events(days=1, start=None, authorization=None):
     creds = get_credentials()
     service = build("calendar", "v3", credentials=creds)
     if start:
@@ -117,7 +130,7 @@ def get_events(days=1, start=None):
     time_max = (local_midnight + datetime.timedelta(days=days)).astimezone(pytz.utc).isoformat()
 
     try:
-        calendar_ids = get_calendar_ids()
+        calendar_ids = _user_calendar_ids(authorization)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not read calendar list: {e}")
 
