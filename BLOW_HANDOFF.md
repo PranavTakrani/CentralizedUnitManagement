@@ -1,6 +1,6 @@
 # CUM + BLOW — Project Handoff
 
-Last updated: 2026-08-27
+Last updated: 2026-08-27 (per-user Google Calendar OAuth + calendar sharing)
 
 This document is the single source of truth for the CentralizedUnitManagement
 (CUM) app and the BLOW messaging feature built inside it. It captures the
@@ -57,8 +57,17 @@ supabase/
   a **user JWT** (not service_role) for shared calendars / per-user calendar reads.
 
 ### Deployed URLs
-- Frontend: `https://frontend-pranav-9815.vercel.app` (Vercel project `frontend`)
-- Backend:  `https://backend-pranav-9815.vercel.app` (Vercel project `backend`)
+- Frontend: `https://centralized-unit-for-management.vercel.app` (Vercel project **`cum`**,
+  root directory `frontend`). This is the project that's actually live — it has
+  the real `VITE_API_URL`/Supabase env vars and auto-deploys from `main`.
+  `https://frontend-pranav-9815.vercel.app` is a STALE/orphaned alias from an
+  earlier, differently-named project; ignore it — do not diagnose against it.
+  There is also an empty, unused `frontend` Vercel project (no deployments,
+  no domain) created by accident during a 2026-08-27 session; safe to delete
+  from the Vercel dashboard whenever, has zero effect either way.
+- Backend:  `https://backend-pranav-9815.vercel.app` (Vercel project `backend`,
+  aliases also include `backend-ten-delta-74.vercel.app` and
+  `backend-git-main-pranav-9815.vercel.app` — all point at the same deploys).
 
 ---
 
@@ -143,6 +152,21 @@ data. This migration:
 Indexes on the per-user columns so RLS-filtered queries don't full-scan:
 - `meals(user_id, logged_at desc)`, `Tasks(user_id)`, `calendars(user_id)`.
 
+### 0005_per_user_google_oauth.sql — per-user Google OAuth + calendar sharing
+Replaces the single shared Google refresh token with one per user, and
+replaces the old "create a shared calendar, manually add events" feature
+with "send one of your connected Google calendars to another user."
+- `oauth_tokens` gains `user_id`; PK becomes `(provider, user_id)`. The
+  pre-existing single row was backfilled to the primary account.
+- `oauth_pending_state(state pk, user_id, created_at)` — service_role only;
+  short-lived state→user mapping used during the OAuth redirect round-trip.
+- `calendar_shares(id, owner_id, grantee_id, calendar_id, label, created_at)`
+  — RLS: owner can insert/delete their own; select allowed for owner OR
+  grantee. Reuses `find_user_by_email` from 0001 for the email lookup.
+- Dropped `shared_calendars` / `shared_calendar_members` /
+  `shared_calendar_events` and their RPC/triggers (fully replaced; tables
+  were empty when dropped).
+
 ### Users (as of handoff)
 - `pranav.takrani@gmail.com` — a52d07e3-e8cc-4811-9a33-270e1e7b3517 (primary; owns backfilled data)
 - `agneyat2@gmail.com` — 1d773d94-50a2-4e75-9ff4-e35b34066a9e
@@ -166,10 +190,19 @@ Indexes on the per-user columns so RLS-filtered queries don't full-scan:
   layout at <=720px so the message widget is reachable (sidebar capped 45dvh).
 
 ### Schedule (frontend/src/pages/Schedule.jsx)
-- Personal Google calendars (backend `/calendar/upcoming`, JWT-scoped per user).
-- Shared calendars via backend `/shared-calendar/*`: create with a color picker,
-  invite members by email, add events; shared events render in the week grid
-  colored per calendar.
+- Personal Google calendars, per-user OAuth. "Connect Google Calendar" starts
+  a real Google consent flow (`POST /calendar/oauth/start` → redirect →
+  `GET /calendar/oauth/callback`); once connected, a checkbox picker
+  (`GET /calendar/google-calendars`, live from the user's own token) replaces
+  manual calendar_id entry. Enabled calendars are still tracked in the
+  per-user `calendars` table via `/calendar/enabled` (GET/POST/DELETE).
+- Calendar sharing: send one of your connected Google calendars to another
+  CUM user by email (`POST /calendar/share`, resolves via
+  `find_user_by_email`). Recipient sees it under "Shared with me"
+  (`GET /calendar/shared-with-me`) and its live events merge into their week
+  grid (`GET /calendar/shared-events` — backend fetches using the SHARER's
+  stored token server-side; that token never reaches the recipient or the
+  frontend). Revoke via `DELETE /calendar/share/{id}` (owner only).
 - Responses are coerced to arrays (`Array.isArray(...) ? ... : []`) so a bad/
   unreachable backend cannot crash the page (it degrades to an empty calendar).
 
@@ -180,27 +213,46 @@ Indexes on the per-user columns so RLS-filtered queries don't full-scan:
 ### Backend routers
 - `calendar.py`: `_user_calendar_ids(authorization)` builds an anon-key client +
   `postgrest.auth(token)` so it reads only the caller's calendars. `/today` and
-  `/upcoming` accept the Authorization header.
-- `shared_calendar.py`: `/list`, `/create`, `/{id}` (delete), `/events` (GET/POST),
-  `/events/{id}` (delete), `/members` (POST). All via a per-request user-JWT
-  client so RLS applies. Requires `SUPABASE_URL` + `SUPABASE_ANON_KEY` env.
+  `/upcoming` accept the Authorization header. Caller identity for Google-token
+  lookups is resolved via `_verified_user_id` (`supabase.auth.get_user(token)`)
+  — a Supabase-verified user id, never a client-decoded JWT, since that id
+  decides whose Google refresh token gets used.
+  - OAuth: `POST /oauth/start`, `GET /oauth/callback`, `GET /status`,
+    `GET /google-calendars`.
+  - Enabled calendars: `GET/POST /enabled`, `DELETE /enabled/{id}`.
+  - Sharing: `POST /share`, `GET /my-shares`, `GET /shared-with-me`,
+    `DELETE /share/{id}`, `GET /shared-events`.
+  - Requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+    `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FRONTEND_URL` env.
+- `spotify.py`: single-tenant (app owner's account only); uses a fixed
+  `OWNER_USER_ID` constant rather than a per-request caller, since
+  `token_store` is now keyed by `(provider, user_id)`.
 - `frontend/src/lib/api.js`: axios request interceptor attaches
   `Authorization: Bearer <supabase access_token>` to every backend call.
+- The old `shared_calendar.py` router (create-your-own shared calendar,
+  manual events, invite-by-email) is removed — replaced by calendar sharing
+  above.
 
 ---
 
 ## 6. Environment variables
 
-### frontend project (Vercel) — build-time, inlined by Vite (redeploy to apply)
-- `VITE_API_URL` = `https://backend-pranav-9815.vercel.app`   <-- REQUIRED, see Outstanding
+### frontend — Vercel project **`cum`** (root directory `frontend`) — build-time, inlined by Vite
+- `VITE_API_URL` = `https://backend-pranav-9815.vercel.app`
 - `VITE_SUPABASE_URL` = `https://tuypeumfbfaiqutjsfur.supabase.co`
 - `VITE_SUPABASE_ANON_KEY` = `sb_publishable_a8mJLf3I_CC0d0cN1o9Y5w_UCmwkv75`
 
-### backend project (Vercel) — runtime (os.getenv)
+All three are already set correctly on `cum` and confirmed baked into the live
+bundle. Do NOT set these on the separate `frontend` Vercel project — that one
+is stale/orphaned, not what serves traffic.
+
+### backend project (Vercel `backend`) — runtime (os.getenv)
 - `SUPABASE_URL` = `https://tuypeumfbfaiqutjsfur.supabase.co`
 - `SUPABASE_ANON_KEY` = legacy anon JWT (role=anon)  <-- REQUIRED for shared calendars
 - `SUPABASE_SERVICE_ROLE_KEY` = secret key (used by token_store; keep SENSITIVE)
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (calendar), Spotify creds.
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (calendar OAuth + Google API), Spotify creds.
+- `FRONTEND_URL` = `https://centralized-unit-for-management.vercel.app` — where
+  `/calendar/oauth/callback` redirects after a successful Google connect.
 
 Notes:
 - Use the Vercel **Environment Variables UI**, not vercel.json (keeps keys out of git).
@@ -217,7 +269,8 @@ Backend:
 cd backend
 python -m venv ../.venv ; ../.venv/Scripts/activate   (Windows)
 pip install -r requirements.txt
-# set SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, GOOGLE_*, SPOTIFY_* in backend/.env
+# set SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, GOOGLE_*, SPOTIFY_*,
+# FRONTEND_URL (defaults to http://localhost:5173 if unset) in backend/.env
 uvicorn main:app --reload --port 8000
 ```
 
@@ -233,10 +286,20 @@ npm run dev
 Applying migrations: run the SQL in `supabase/migrations/` via the Supabase SQL
 editor, or via the Management API `POST /v1/projects/<ref>/database/query`.
 
+Connecting Google Calendar locally requires the OAuth client (the one behind
+`GOOGLE_CLIENT_ID`) to be a **Web application** type with
+`http://localhost:8000/calendar/oauth/callback` registered as an authorized
+redirect URI, and — if the consent screen is still in Testing mode — your
+Google account listed as a test user. Both are Console-only; there's no
+gcloud/API path for editing a standard OAuth client's redirect URIs or the
+consent screen's test-user list.
+
 ---
 
 ## 8. Git history (main)
 
+- (pending) fix: correct oauth_tokens backfill + drop order in 0005 migration
+- (pending) feat: per-user Google Calendar OAuth + calendar sharing between users
 - d76fa49 fix: guard calendar/shared responses against non-array (blank Schedule/Dashboard)
 - f397e47 perf: fix BLOW realtime reload loop + add user_id indexes; scale dashboard Today widget
 - d69c670 Per-user data isolation, shared calendars, BLOW requests + mobile
@@ -244,45 +307,32 @@ editor, or via the Management API `POST /v1/projects/<ref>/database/query`.
 
 ---
 
-## 9. OUTSTANDING / BLOCKERS (verified 2026-08-27 ~11:55 ET)
+## 9. OUTSTANDING (verified 2026-08-27/28)
 
-These were checked with curl against the live deployments and are STILL not
-working. Production calendar + shared-calendar data will not load until fixed.
+The two Vercel-side blockers previously listed here (deployment protection,
+missing `VITE_API_URL`) turned out to be misdiagnosed against the stale
+`frontend` project, not the real `cum` one — the live site was already fine
+on both. Verified end to end:
+```
+curl https://backend-pranav-9815.vercel.app/                # {"status":"CUM is online"}
+curl https://backend-pranav-9815.vercel.app/calendar/status # 401 without auth (expected)
+```
+`cum`'s live bundle contains the new Schedule.jsx ("Connect Google Calendar" UI).
 
-1. **Backend deployment protection is STILL ON.**
-   `GET https://backend-pranav-9815.vercel.app/` and `/calendar/today` both
-   return `302 -> vercel.com/sso-api` (Vercel Authentication gate). The frontend
-   cannot reach the API through this gate.
-   FIX: Vercel -> backend project -> Settings -> Deployment Protection ->
-   set **Vercel Authentication = Disabled** for Production (or Preview-only).
-   Verify: `curl https://backend-pranav-9815.vercel.app/` should return
-   `{"status":"CUM is online"}`, not a 302.
+Still open:
+1. **Google Cloud Console setup for OAuth** (Console-only, no gcloud/API path):
+   - Add `https://backend-pranav-9815.vercel.app/calendar/oauth/callback` as an
+     authorized redirect URI on the `GOOGLE_CLIENT_ID` OAuth 2.0 Client (must be
+     "Web application" type).
+   - If the consent screen is still in Testing mode, add every non-owner user
+     (`agneyat2@gmail.com`, `test@gmail.com`, ...) as a test user, or their
+     consent attempt will be rejected.
+2. **Empty stray `frontend` Vercel project** — created by accident, zero
+   deployments/domain, harmless. Delete from the dashboard whenever, or leave it.
 
-2. **Frontend `VITE_API_URL` is NOT applied.**
-   The deployed frontend bundle (`index-DF7pVyXj.js`) contains NO backend URL —
-   only the Supabase URL. So `api.js` falls back to `http://localhost:8000` in
-   production and all backend calls fail. The redeploy did not pick up the var
-   (same bundle hash => same build).
-   FIX: Vercel -> frontend project -> Settings -> Environment Variables -> add
-   `VITE_API_URL = https://backend-pranav-9815.vercel.app` for Production, then
-   trigger a fresh **redeploy** (Vite inlines env at build time). Verify: the new
-   bundle should contain the backend URL and Schedule/Dashboard should load
-   calendar data.
-
-3. **Confirm backend env vars** (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) are set on
-   the backend project so `/shared-calendar/*` works (otherwise those endpoints
-   return 500 "SUPABASE_URL / SUPABASE_ANON_KEY must be set").
-
-### Security follow-ups
+### Security follow-ups (still open)
 - **Rotate the Supabase management PAT** (`sbp_...`) that was shared in chat
   during setup — it grants full account control. Rotate in Supabase -> Account ->
   Access Tokens.
 - Consider rotating the Spotify client secret (it was committed in backend/.env
   historically; .env is now gitignored).
-
-### After the 3 blockers are fixed, re-verify end to end:
-```
-curl https://backend-pranav-9815.vercel.app/                 # {"status":"CUM is online"}
-curl https://backend-pranav-9815.vercel.app/calendar/today   # 401 without auth (expected) or JSON with auth
-# In the app: Schedule shows Google + shared events; BLOW send/accept works.
-```
